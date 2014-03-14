@@ -88,3 +88,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_add_path(void)
+{
+  char ** pathPtr = 0;
+  if(argstr(0,pathPtr) < 0)
+    return -1;
+
+  return add_path(*pathPtr);
+}

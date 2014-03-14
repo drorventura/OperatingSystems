@@ -103,3 +103,16 @@ strlen(const char *s)
   return n;
 }
 
+// support for appending strings was added
+char*
+strcat(char* dest, const char* src)
+{
+  int i = 0;
+
+  while (dest[i] != '\0')
+    i++;
+  while (*src != '\0')
+    dest[i++] = *src++;
+  dest[i] = '\0'; //useless because already initialized with 0
+  return (dest);
+}

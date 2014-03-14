@@ -4,6 +4,8 @@
 #include "user.h"
 #include "x86.h"
 
+#define NULL   0
+
 char*
 strcpy(char *s, char *t)
 {
@@ -102,4 +104,64 @@ memmove(void *vdst, void *vsrc, int n)
   while(n-- > 0)
     *dst++ = *src++;
   return vdst;
+}
+
+char*
+strtok(char *teststr, char ch)
+{
+    char *dummystr = NULL;
+    char *start = NULL;
+    char *end = NULL;
+    char nullch = '\0';
+    char *address_of_null = &nullch;
+    static char *nexttok;
+
+    if(teststr != NULL)
+    {
+        dummystr = teststr;
+    }
+    else
+    {
+        if(*nexttok == '\0')
+            return NULL;
+        dummystr = nexttok;
+    }
+
+
+    while(dummystr != NULL)
+    {
+        //empty string
+        if(*dummystr == '\0')
+            break;
+        if(*dummystr != ch)
+        {
+            if(!start)
+                start = dummystr;
+
+            dummystr++;
+
+            // handle the case where the delimiter is not at the end of the string.
+            if(*dummystr == '\0')
+            {
+                nexttok = dummystr;
+                break;
+            }
+        }
+        else
+        {
+            if(start)
+            {
+                end = dummystr;
+                nexttok = dummystr+1;
+                *end = *address_of_null;
+                break;
+            }
+            else
+            {
+                dummystr++;
+            }
+        }
+    }
+
+    return start;
 }
