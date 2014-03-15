@@ -8,10 +8,6 @@ struct spinlock;
 struct stat;
 struct superblock;
 
-#define INPUT_BUF 128
-#define MAX_PATH_ENTRIES 10
-extern char pathsEnv[MAX_PATH_ENTRIES][INPUT_BUF];
-
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);

@@ -174,6 +174,7 @@ consputc(int c)
 }
 
 #define INPUT_BUF 128
+
 struct {
   struct spinlock lock;
   char buf[INPUT_BUF];
