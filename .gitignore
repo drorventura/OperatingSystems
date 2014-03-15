@@ -16,5 +16,8 @@
 *.exe
 *.out
 *.app
+*.swp
+*.swo
 *.c.swp
+*.c.swo
 *.DS_Store
