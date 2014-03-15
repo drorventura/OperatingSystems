@@ -1,7 +1,7 @@
 00000000 .text
-00000ad4 .rodata
-00000b14 .eh_frame
-00000dd0 .data
+00000adc .rodata
+00000b1c .eh_frame
+00000dd8 .data
 00000e00 .bss
 00000000 .comment
 00000000 .debug_aranges
@@ -14,23 +14,23 @@
 00000000 ulib.c
 00000348 stosb
 00000000 printf.c
-00000634 putc
-0000065c printint
-00000dd0 digits.1013
+0000063c putc
+00000664 printint
+00000dd8 digits.1013
 00000000 umalloc.c
 00000e00 base
 00000e08 freep
-0000099d morecore
+000009a5 morecore
 00000000 
 0000036d strcpy
-0000070c printf
+00000714 printf
 00000552 memmove
 00000251 matchhere
 000005dc mknod
 00000450 gets
 00000614 getpid
 00000000 grep
-000009f5 malloc
+000009fd malloc
 00000624 sleep
 000005a4 pipe
 000005b4 write
@@ -44,7 +44,7 @@
 0000058c fork
 0000061c sbrk
 0000062c uptime
-00000de4 __bss_start
+00000dec __bss_start
 000003fc memset
 00000106 main
 000002f8 matchstar
@@ -52,7 +52,7 @@
 0000060c dup
 00000e20 buf
 000004bd stat
-00000de4 _edata
+00000dec _edata
 00001220 _end
 000001f6 match
 000005f4 link
@@ -63,4 +63,5 @@
 00000420 strchr
 000005fc mkdir
 000005bc close
-000008bc free
+000008c4 free
+00000634 addpath

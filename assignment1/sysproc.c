@@ -88,3 +88,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+//This system call adds the path entry to the existing environment variable path. The system
+//call returns 0 upon success and -1 upon failure (all path entries in use).
+int sys_addpath(char* path)
+{
+   char ** pathPtr = 0;
+   if (argstr(0,pathPtr) < -1)
+       return -1;
+    return add_path(*pathPtr);
+}

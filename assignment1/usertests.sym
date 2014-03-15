@@ -1,7 +1,7 @@
 00000000 .text
-00004148 .rodata
-00005814 .eh_frame
-00005e88 .data
+00004150 .rodata
+0000581c .eh_frame
+00005e90 .data
 00005ec0 .bss
 00000000 .comment
 00000000 .debug_aranges
@@ -16,18 +16,18 @@
 00000000 ulib.c
 000039bc stosb
 00000000 printf.c
-00003ca8 putc
-00003cd0 printint
-00005ea4 digits.1013
+00003cb0 putc
+00003cd8 printint
+00005eac digits.1013
 00000000 umalloc.c
 00005f40 base
 00005f48 freep
-00004011 morecore
+00004019 morecore
 00000000 
 000039e1 strcpy
 000009e6 exitwait
-00003d80 printf
-00005e9c stdout
+00003d88 printf
+00005ea4 stdout
 00003449 bigargtest
 00003bc6 memmove
 00003c50 mknod
@@ -35,7 +35,7 @@
 00003c88 getpid
 000006a5 pipe1
 00002bfd iref
-00004069 malloc
+00004071 malloc
 00003c98 sleep
 00003571 fsfull
 00001b14 bigdir
@@ -43,13 +43,13 @@
 000002bf writetest1
 000023c7 bigwrite
 00000b48 sharedfd
-00005ea0 randstate
+00005ea8 randstate
 00003c18 pipe
 00005f60 uninit
 000029bb dirfile
 00003c28 write
 000033d9 bsstest
-00005e88 echoargv
+00005e90 echoargv
 00003c60 fstat
 00003c38 kill
 0000330c validatetest
@@ -66,7 +66,7 @@
 00003c00 fork
 00003c90 sbrk
 00003ca0 uptime
-00005eb8 __bss_start
+00005ec0 __bss_start
 00003a70 memset
 000004c6 createtest
 000038b7 main
@@ -83,7 +83,7 @@
 0000057c dirtest
 00003b31 stat
 000024ce bigfile
-00005eb8 _edata
+00005ec0 _edata
 0000a684 _end
 0000124c unlinkread
 00003c68 link
@@ -99,4 +99,5 @@
 000032e1 validateint
 00003c70 mkdir
 00003c30 close
-00003f30 free
+00003f38 free
+00003ca8 addpath

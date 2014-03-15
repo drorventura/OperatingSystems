@@ -39,7 +39,7 @@ forktest(void)
   int n, pid;
 
   printf(1, "fork test\n");
-  2f:	c7 44 24 04 00 04 00 	movl   $0x400,0x4(%esp)
+  2f:	c7 44 24 04 08 04 00 	movl   $0x408,0x4(%esp)
   36:	00 
   37:	c7 04 24 01 00 00 00 	movl   $0x1,(%esp)
   3e:	e8 bd ff ff ff       	call   0 <printf>
@@ -83,7 +83,7 @@ forktest(void)
     printf(1, "fork claimed to work N times!\n", N);
   7d:	c7 44 24 08 e8 03 00 	movl   $0x3e8,0x8(%esp)
   84:	00 
-  85:	c7 44 24 04 0c 04 00 	movl   $0x40c,0x4(%esp)
+  85:	c7 44 24 04 14 04 00 	movl   $0x414,0x4(%esp)
   8c:	00 
   8d:	c7 04 24 01 00 00 00 	movl   $0x1,(%esp)
   94:	e8 67 ff ff ff       	call   0 <printf>
@@ -97,7 +97,7 @@ forktest(void)
   a3:	85 c0                	test   %eax,%eax
   a5:	79 19                	jns    c0 <forktest+0x97>
       printf(1, "wait stopped early\n");
-  a7:	c7 44 24 04 2b 04 00 	movl   $0x42b,0x4(%esp)
+  a7:	c7 44 24 04 33 04 00 	movl   $0x433,0x4(%esp)
   ae:	00 
   af:	c7 04 24 01 00 00 00 	movl   $0x1,(%esp)
   b6:	e8 45 ff ff ff       	call   0 <printf>
@@ -122,7 +122,7 @@ forktest(void)
   ce:	83 f8 ff             	cmp    $0xffffffff,%eax
   d1:	74 19                	je     ec <forktest+0xc3>
     printf(1, "wait got too many\n");
-  d3:	c7 44 24 04 3f 04 00 	movl   $0x43f,0x4(%esp)
+  d3:	c7 44 24 04 47 04 00 	movl   $0x447,0x4(%esp)
   da:	00 
   db:	c7 04 24 01 00 00 00 	movl   $0x1,(%esp)
   e2:	e8 19 ff ff ff       	call   0 <printf>
@@ -131,7 +131,7 @@ forktest(void)
   }
   
   printf(1, "fork test OK\n");
-  ec:	c7 44 24 04 52 04 00 	movl   $0x452,0x4(%esp)
+  ec:	c7 44 24 04 5a 04 00 	movl   $0x45a,0x4(%esp)
   f3:	00 
   f4:	c7 04 24 01 00 00 00 	movl   $0x1,(%esp)
   fb:	e8 00 ff ff ff       	call   0 <printf>
@@ -688,3 +688,9 @@ SYSCALL(uptime)
  3f8:	b8 0e 00 00 00       	mov    $0xe,%eax
  3fd:	cd 40                	int    $0x40
  3ff:	c3                   	ret    
+
+00000400 <addpath>:
+SYSCALL(addpath)
+ 400:	b8 16 00 00 00       	mov    $0x16,%eax
+ 405:	cd 40                	int    $0x40
+ 407:	c3                   	ret    

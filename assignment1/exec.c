@@ -7,8 +7,8 @@
 #include "x86.h"
 #include "elf.h"
 
-#define INPUT_BUF 128
-#define MAX_PATH_ENTRIES 10
+char pathsEnv[MAX_PATH_ENTRIES][INPUT_BUF];
+int nextPathPosition;
 
 int 
 exec(char *path, char **argv)
@@ -20,11 +20,20 @@ exec(char *path, char **argv)
   struct inode *ip;
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
-/*  char pathme[MAX_PATH_ENTRIES][INPUT_BUF]; */
+  char *newPath = "";
 
 
-  if((ip = namei(path)) == 0)
-    return -1;
+  if((ip = namei(path)) == 0){
+      // iterate all pathsEnv array to append and check if program exists
+      for( i=0 ; i < nextPathPosition ; i++)
+      {
+          strncpy(newPath, pathsEnv[i], strlen(pathsEnv[i]));
+          strcat(newPath,path);
+          if(( ip = namei(newPath)) != 0)
+              break;
+      }
+      if(!ip) return -1;
+  }
   ilock(ip);
   pgdir = 0;
 
@@ -103,4 +112,16 @@ exec(char *path, char **argv)
   if(ip)
     iunlockput(ip);
   return -1;
+}
+
+int
+add_path(char* path)
+{
+    if(nextPathPosition < MAX_PATH_ENTRIES)
+    {
+        strncpy(pathsEnv[nextPathPosition], path, strlen(path));
+        nextPathPosition++;
+        return 1;
+    }
+    return -1;
 }
