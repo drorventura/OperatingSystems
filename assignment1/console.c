@@ -14,9 +14,19 @@
 #include "proc.h"
 #include "x86.h"
 
+#define MAX_HISTORY_LENGTH 20
+#define INPUT_BUF 128
+
+char historyBuf[MAX_HISTORY_LENGTH][INPUT_BUF];
+int history_index = 0;
+int history_index_pos = 0;
+int bufIndex = 0;
+
 static void consputc(int);
 
 static int panicked = 0;
+void killLine(void);
+void loadHistoryToScreen(int c);
 
 static struct {
   struct spinlock lock;
@@ -124,6 +134,8 @@ panic(char *s)
 //PAGEBREAK: 50
 #define BACKSPACE 0x100
 #define CRTPORT 0x3d4
+#define UPARROW     0xE2
+#define DOWNARROW   0xE3
 static ushort *crt = (ushort*)P2V(0xb8000);  // CGA memory
 
 static void
@@ -174,7 +186,6 @@ consputc(int c)
 }
 
 #define INPUT_BUF 128
-
 struct {
   struct spinlock lock;
   char buf[INPUT_BUF];
@@ -189,6 +200,8 @@ void
 consoleintr(int (*getc)(void))
 {
   int c;
+  int i = 0;
+  
 
   acquire(&input.lock);
   while((c = getc()) >= 0){
@@ -209,20 +222,87 @@ consoleintr(int (*getc)(void))
         consputc(BACKSPACE);
       }
       break;
+      // FIXME need to re set position pointer
+    case (UPARROW) :
+
+      killLine();
+      loadHistoryToScreen(c);  
+
+        if (history_index_pos == 0) {
+            history_index_pos = history_index-1;
+        } else {
+            history_index_pos--;
+        }
+      break;
+    
+      // FIXME need to re set position pointer
+    case (DOWNARROW) :
+
+      killLine();
+      loadHistoryToScreen(c);  
+
+      if (history_index_pos == history_index - 1) {
+          history_index_pos = 0;
+      } else {
+          history_index_pos++;
+      }
+      break;
+
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
         input.buf[input.e++ % INPUT_BUF] = c;
         consputc(c);
         if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
+            i = input.r;
+            while(i != input.e)
+            {
+                historyBuf[history_index][bufIndex] = input.buf[i % INPUT_BUF];
+                i++;
+                bufIndex++;
+            }
           input.w = input.e;
           wakeup(&input.r);
+
+          history_index_pos = history_index;
+          history_index++;
+          bufIndex = 0;
         }
       }
       break;
     }
   }
   release(&input.lock);
+}
+
+//kill line
+void killLine(void){
+
+    while(input.e != input.w &&
+            input.buf[(input.e-1) % INPUT_BUF] != '\n'){
+        input.e--;
+        consputc(BACKSPACE);
+    }
+}
+
+void loadHistoryToScreen(int c){
+
+int i = 0;
+    while( historyBuf[history_index_pos][i] != '\n')
+    {
+
+        c = historyBuf[history_index_pos][i];
+        if(c != 0 && input.e-input.r < INPUT_BUF){
+            c = (c == '\r') ? '\n' : c;
+            input.buf[input.e++ % INPUT_BUF] = c;
+            consputc(c);
+            if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
+                input.w = input.e;
+                wakeup(&input.r);
+            }
+        }
+        i++;
+    }
 }
 
 int
