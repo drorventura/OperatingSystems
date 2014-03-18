@@ -20,6 +20,8 @@
 char historyBuf[MAX_HISTORY_LENGTH][INPUT_BUF];
 int history_index = 0;
 int history_index_pos = 0;
+int historyFlag = 0;
+int historyCounter = 0;
 int bufIndex = 0;
 
 static void consputc(int);
@@ -202,7 +204,6 @@ consoleintr(int (*getc)(void))
   int c;
   int i = 0;
   
-
   acquire(&input.lock);
   while((c = getc()) >= 0){
     switch(c){
@@ -222,32 +223,48 @@ consoleintr(int (*getc)(void))
         consputc(BACKSPACE);
       }
       break;
-      // FIXME need to re set position pointer
+    // UPARROW
     case (UPARROW) :
 
-      killLine();
-      loadHistoryToScreen(c);  
+      if (historyCounter == 0)
+          break;
+      if (!historyFlag) {
+          killLine();
+          loadHistoryToScreen(c);  
+          historyFlag= 1;
+          break;
+      }
+      else if (history_index_pos != 0)
+      {
+          history_index_pos--;
+          history_index_pos = history_index_pos % MAX_HISTORY_LENGTH;
 
-        if (history_index_pos == 0) {
-            history_index_pos = history_index-1;
-        } else {
-            history_index_pos--;
-        }
+      }
+      else  if (history_index_pos == 0 && 
+                 historyCounter == MAX_HISTORY_LENGTH)
+      {
+          history_index_pos = MAX_HISTORY_LENGTH -1;
+
+      } else if (history_index_pos == 0 && 
+                 historyCounter != MAX_HISTORY_LENGTH)
+      {
+          history_index_pos = history_index -1;
+      }
+          killLine();
+          loadHistoryToScreen(c);  
       break;
     
-      // FIXME need to re set position pointer
+    // DOWNARROW
     case (DOWNARROW) :
 
-      killLine();
-      loadHistoryToScreen(c);  
-
-      if (history_index_pos == history_index - 1) {
-          history_index_pos = 0;
-      } else {
+      if (historyFlag && history_index_pos != history_index - 1){
           history_index_pos++;
+          history_index_pos = history_index_pos % MAX_HISTORY_LENGTH;
+          killLine();
+          loadHistoryToScreen(c);  
       }
       break;
-
+    
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
@@ -255,18 +272,30 @@ consoleintr(int (*getc)(void))
         consputc(c);
         if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
             i = input.r;
+            bufIndex = 0;
             while(i != input.e)
             {
-                historyBuf[history_index][bufIndex] = input.buf[i % INPUT_BUF];
+                historyBuf[history_index % MAX_HISTORY_LENGTH][bufIndex] = input.buf[i % INPUT_BUF];
                 i++;
                 bufIndex++;
             }
+
           input.w = input.e;
           wakeup(&input.r);
 
-          history_index_pos = history_index;
+            // check if user enter just NEWLINE - we dont want save in history
+          if (bufIndex == 1){
+              if (historyBuf[history_index % MAX_HISTORY_LENGTH][0] == '\n')
+                  break;
+          }
+
+          if (historyCounter != MAX_HISTORY_LENGTH)
+              historyCounter++;
+
+          history_index_pos = history_index % MAX_HISTORY_LENGTH;
           history_index++;
-          bufIndex = 0;
+          history_index = history_index % MAX_HISTORY_LENGTH;
+          historyFlag = 0;
         }
       }
       break;
@@ -276,7 +305,8 @@ consoleintr(int (*getc)(void))
 }
 
 //kill line
-void killLine(void){
+void killLine(void)
+{
 
     while(input.e != input.w &&
             input.buf[(input.e-1) % INPUT_BUF] != '\n'){
@@ -285,9 +315,9 @@ void killLine(void){
     }
 }
 
-void loadHistoryToScreen(int c){
-
-int i = 0;
+void loadHistoryToScreen(int c)
+{
+    int i = 0;
     while( historyBuf[history_index_pos][i] != '\n')
     {
 
