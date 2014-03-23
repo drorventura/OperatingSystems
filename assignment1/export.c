@@ -30,7 +30,7 @@ main(int argc, char* argv[])
             error = add_path(path);
         if(error)
         {
-        printf(1,"export: PATH evironment varialbe is full\n PATH = %s and the rest paths not included! \n",path);
+            printf(1, "export: PATH evironment varialbe is full\n PATH = %s and the rest were not included");
             break;
         }
     }
