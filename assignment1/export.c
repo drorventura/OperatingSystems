@@ -1,7 +1,5 @@
 #include "types.h"
-#include "stat.h"
 #include "user.h"
-#include "fs.h"
 
 #define NULL   0
 
@@ -31,7 +29,10 @@ main(int argc, char* argv[])
         if(path)
             error = add_path(path);
         if(error)
-            printf(1, "export: invalid input or PATH is full\n");
+        {
+        printf(1,"export: PATH evironment varialbe is full\n PATH = %s and the rest paths not included! \n",path);
+            break;
+        }
     }
 
     exit();
