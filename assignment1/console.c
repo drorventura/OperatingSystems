@@ -27,6 +27,7 @@ int bufIndex = 0;
 static void consputc(int);
 
 static int panicked = 0;
+void fixPrintWhenLeftKeyIsPressed();
 void killLine(void);
 void loadHistoryToScreen(int c);
 
@@ -135,16 +136,18 @@ panic(char *s)
 
 //PAGEBREAK: 50
 #define BACKSPACE 0x100
-#define CRTPORT 0x3d4
-#define UPARROW     0xE2
-#define DOWNARROW   0xE3
+#define CRTPORT   0x3d4
+#define KEY_LF    0xE4
+#define KEY_RT    0xE5
+#define KEY_UP    0xE2
+#define KEY_DN    0xE3
 static ushort *crt = (ushort*)P2V(0xb8000);  // CGA memory
 
 static void
 cgaputc(int c)
 {
   int pos;
-  
+
   // Cursor position: col + 80*row.
   outb(CRTPORT, 14);
   pos = inb(CRTPORT+1) << 8;
@@ -155,7 +158,15 @@ cgaputc(int c)
     pos += 80 - pos%80;
   else if(c == BACKSPACE){
     if(pos > 0) --pos;
-  } else
+  }
+  else if(c == KEY_LF)
+  {
+    if(pos > 0) --pos;
+  }
+  else if(c == KEY_RT){
+    ++pos;
+  }
+  else
     crt[pos++] = (c&0xff) | 0x0700;  // black on white
   
   if((pos/80) >= 24){  // Scroll up.
@@ -168,7 +179,8 @@ cgaputc(int c)
   outb(CRTPORT+1, pos>>8);
   outb(CRTPORT, 15);
   outb(CRTPORT+1, pos);
-  crt[pos] = ' ' | 0x0700;
+  if(c != KEY_LF && c != KEY_RT)
+    crt[pos] = ' ' | 0x0700;
 }
 
 void
@@ -182,7 +194,12 @@ consputc(int c)
 
   if(c == BACKSPACE){
     uartputc('\b'); uartputc(' '); uartputc('\b');
-  } else
+  }
+  else if(c == KEY_LF || c == KEY_RT)
+  {
+
+  }
+  else
     uartputc(c);
   cgaputc(c);
 }
@@ -198,12 +215,15 @@ struct {
 
 #define C(x)  ((x)-'@')  // Control-x
 
+static int leftClicksCounter = 0;
+
 void
 consoleintr(int (*getc)(void))
 {
   int c;
   int i = 0;
   
+
   acquire(&input.lock);
   while((c = getc()) >= 0){
     switch(c){
@@ -218,14 +238,29 @@ consoleintr(int (*getc)(void))
       }
       break;
     case C('H'): case '\x7f':  // Backspace
-      if(input.e != input.w){
+      if(input.e != input.w)
+      {
         input.e--;
         consputc(BACKSPACE);
       }
       break;
-    // UPARROW
-    case (UPARROW) :
-
+    case KEY_LF:               // left arrow
+      if(input.e != input.w)
+      {
+        consputc(KEY_LF);
+        leftClicksCounter++;
+        input.e--;
+      }
+      break;
+    case KEY_RT:               // right arrow
+      if(leftClicksCounter > 0)
+      {
+        consputc(KEY_RT);
+        leftClicksCounter--;
+        input.e++;
+      }
+      break;
+    case (KEY_UP) :
       if (historyCounter == 0)
           break;
       if (!historyFlag) {
@@ -254,10 +289,9 @@ consoleintr(int (*getc)(void))
           loadHistoryToScreen(c);  
       break;
     
-    // DOWNARROW
-    case (DOWNARROW) :
-
-      if (historyFlag && history_index_pos != history_index - 1){
+    case (KEY_DN) :
+      if (historyFlag && history_index_pos != history_index - 1)
+      {
           history_index_pos++;
           history_index_pos = history_index_pos % MAX_HISTORY_LENGTH;
           killLine();
@@ -268,8 +302,17 @@ consoleintr(int (*getc)(void))
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
+
+        if(c == '\n') //fix the input.e index when enter is pressed and resets leftCount
+        {
+            input.e = (input.e + leftClicksCounter) % INPUT_BUF;
+            leftClicksCounter = 0;
+        }
+
         input.buf[input.e++ % INPUT_BUF] = c;
         consputc(c);
+        fixPrintWhenLeftKeyIsPressed();
+
         if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
             i = input.r;
             bufIndex = 0;
@@ -279,12 +322,12 @@ consoleintr(int (*getc)(void))
                 i++;
                 bufIndex++;
             }
-
           input.w = input.e;
           wakeup(&input.r);
 
-            // check if user enter just NEWLINE - we dont want save in history
-          if (bufIndex == 1){
+          // check if user enter just NEWLINE - we dont want save in history
+          if (bufIndex == 1)
+          {
               if (historyBuf[history_index % MAX_HISTORY_LENGTH][0] == '\n')
                   break;
           }
@@ -302,6 +345,21 @@ consoleintr(int (*getc)(void))
     }
   }
   release(&input.lock);
+}
+
+//fix print after leftKey is pressed
+void fixPrintWhenLeftKeyIsPressed()
+{
+    int i;
+    for(i = leftClicksCounter ; i > 0 ; i--)
+    {
+        consputc(input.buf[input.e++ % INPUT_BUF]);
+    }
+    for(i = leftClicksCounter ; i > 0 ; i--)
+    {
+        consputc(KEY_LF);
+    }
+    input.e = (input.e - leftClicksCounter) % INPUT_BUF;
 }
 
 //kill line
