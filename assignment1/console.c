@@ -222,7 +222,6 @@ consoleintr(int (*getc)(void))
 {
   int c;
   int i = 0;
-  
 
   acquire(&input.lock);
   while((c = getc()) >= 0){
@@ -309,6 +308,10 @@ consoleintr(int (*getc)(void))
             input.e = (input.e + leftClicksCounter) % INPUT_BUF;
             leftClicksCounter = 0;
         }
+//        else if(leftClicksCounter > 0)
+//        {
+//            leftClicksCounter--;
+//        }
 
         input.buf[input.e++ % INPUT_BUF] = c;
         consputc(c);
