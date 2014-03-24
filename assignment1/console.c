@@ -179,8 +179,10 @@ cgaputc(int c)
   outb(CRTPORT+1, pos>>8);
   outb(CRTPORT, 15);
   outb(CRTPORT+1, pos);
-  if(c != KEY_LF && c != KEY_RT)
+  if(c == BACKSPACE)
     crt[pos] = ' ' | 0x0700;
+  else
+    crt[pos] = crt[pos] | 0x0700;
 }
 
 void
@@ -257,6 +259,7 @@ consoleintr(int (*getc)(void))
         consputc(KEY_RT);
         leftClicksCounter--;
         input.e++;
+        input.e = input.e % INPUT_BUF;
       }
       break;
     case (KEY_UP) :
@@ -307,14 +310,13 @@ consoleintr(int (*getc)(void))
             input.e = (input.e + leftClicksCounter) % INPUT_BUF;
             leftClicksCounter = 0;
         }
-//        else if(leftClicksCounter > 0)
-//        {
-//            leftClicksCounter--;
-//        }
+        else if(leftClicksCounter > 0)
+        {
+            leftClicksCounter--;
+        }
 
         input.buf[input.e++ % INPUT_BUF] = c;
         consputc(c);
-        fixPrintWhenLeftKeyIsPressed();
 
         if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
             i = input.r;
@@ -348,21 +350,6 @@ consoleintr(int (*getc)(void))
     }
   }
   release(&input.lock);
-}
-
-//fix print after leftKey is pressed
-void fixPrintWhenLeftKeyIsPressed()
-{
-    int i;
-    for(i = leftClicksCounter ; i > 0 ; i--)
-    {
-        consputc(input.buf[input.e++ % INPUT_BUF]);
-    }
-    for(i = leftClicksCounter ; i > 0 ; i--)
-    {
-        consputc(KEY_LF);
-    }
-    input.e = (input.e - leftClicksCounter) % INPUT_BUF;
 }
 
 //kill line
