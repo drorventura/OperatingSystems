@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#define DEFAULT
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -336,13 +338,14 @@ yield(void)
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
+// FIXME
 void
 forkret(void)
 {
   static int first = 1;
   // Still holding ptable.lock from scheduler.
   release(&ptable.lock);
-
+#ifdef DEFAULT
   if (first) {
     // Some initialization functions must be run in the context
     // of a regular process (e.g., they call sleep), and thus cannot 
@@ -350,7 +353,8 @@ forkret(void)
     first = 0;
     initlog();
   }
-  
+#endif
+  if(first){}
   // Return to "caller", actually trapret (see allocproc).
 }
 
@@ -472,5 +476,3 @@ procdump(void)
     cprintf("\n");
   }
 }
-
-

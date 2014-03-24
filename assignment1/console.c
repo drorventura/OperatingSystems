@@ -260,7 +260,8 @@ consoleintr(int (*getc)(void))
         input.e++;
       }
       break;
-    case (KEY_UP) :
+    case KEY_UP :
+
       if (historyCounter == 0)
           break;
       if (!historyFlag) {
@@ -289,7 +290,7 @@ consoleintr(int (*getc)(void))
           loadHistoryToScreen(c);  
       break;
     
-    case (KEY_DN) :
+    case KEY_DN :
       if (historyFlag && history_index_pos != history_index - 1)
       {
           history_index_pos++;
