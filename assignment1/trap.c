@@ -41,6 +41,8 @@ trap(struct trapframe *tf)
       exit();
     proc->tf = tf;
     syscall();
+    //return for IO
+
     if(proc->killed)
       exit();
     return;
@@ -107,8 +109,9 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(proc && proc->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER)
   {
-      /*if(ticks-proc->ctime % QUANTA == 0)*/
+      if(ticks - proc->ctime % QUANTA == 0)
           yield();
+      //TODO
   }
 
   // Check if the process has been killed since we yielded

@@ -7,12 +7,19 @@
 #include "proc.h"
 #include "spinlock.h"
 
-#define DEFAULT
 
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
+
+// Process Queue for FIFO
+struct {
+  struct spinlock lock;
+  int queue[NPROC];
+  int first;
+  int last;
+} pidQueue;
 
 static struct proc *initproc;
 
@@ -21,11 +28,17 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+void addProcessToQueue(int pid);
+struct proc* getNextProcessFromQueue();
 
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+
+  initlock(&pidQueue.lock, "pidQueue");
+  pidQueue.first = 0;
+  pidQueue.last  = 0;
 }
 
 //PAGEBREAK: 32
@@ -47,12 +60,12 @@ allocproc(void)
   return 0;
 
 found:
-  p->state = EMBRYO;
-  p->pid = nextpid++;
-  p->ctime = ticks;
-  p->etime = 0;
+  p->state  = EMBRYO;
+  p->pid    = nextpid++;
+  p->ctime  = ticks;
+  p->etime  = 0;
   p->iotime = 0;
-  p->rtime = 0;
+  p->rtime  = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -76,8 +89,46 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+#ifdef FRR
+  // insert process to queue - FIFO
+  addProcessToQueue(p->pid); 
+#endif
+
   return p;
 }
+
+// FIFO - add to queue
+void addProcessToQueue(int pid)
+{
+    acquire(&pidQueue.lock);
+    int i = pidQueue.last;
+    pidQueue.last = i++ % NPROC;
+    pidQueue.queue[pidQueue.last] = pid;
+    release(&pidQueue.lock);
+}
+#ifdef FRR
+// FIFO - remove to queue and return next proc pointers
+struct proc* getNextProcessFromQueue()
+{
+    acquire(&pidQueue.lock);
+
+    struct proc *p = 0;
+    int i = pidQueue.first;
+    
+    for(p = ptable.proc ; p < &ptable.proc[NPROC] ; p++)
+    {
+        if(p->pid == pidQueue.queue[pidQueue.first])
+            break;
+    }
+
+    pidQueue.queue[pidQueue.first] = -1; // terminate pid
+    pidQueue.first = i++ % NPROC; // set new cyclic first position
+
+    release(&pidQueue.lock);
+
+    return p;
+}
+#endif /* FIFO */
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -339,12 +390,21 @@ scheduler(void)
   for(;;){
     // Enable interrupts on this processor.
     sti();
-
-    // Loop over process table looking for process to run.
+    
     acquire(&ptable.lock);
+
+// we need to make this function not to run in FRR/3Q...
+#ifndef FRR
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
+#endif
+
+#ifdef FRR
+    p = getNextProcessFromQueue();
+    if (p == 0)
+        continue;
+#endif /* FIFO */
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -358,9 +418,10 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
+#ifndef FRR
     }
+#endif
     release(&ptable.lock);
-
   }
 }
 
@@ -390,20 +451,23 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
+// FIFO - 
+#ifdef FRR
+  addProcessToQueue(proc->pid);
+#endif
+
   sched();
   release(&ptable.lock);
 }
 
 // A fork child's very first scheduling by scheduler()
 // will swtch here.  "Return" to user space.
-// FIXME
 void
 forkret(void)
 {
   static int first = 1;
   // Still holding ptable.lock from scheduler.
   release(&ptable.lock);
-#ifdef DEFAULT
   if (first) {
     // Some initialization functions must be run in the context
     // of a regular process (e.g., they call sleep), and thus cannot 
@@ -411,8 +475,6 @@ forkret(void)
     first = 0;
     initlog();
   }
-#endif
-  if(first){}
   // Return to "caller", actually trapret (see allocproc).
 }
 
@@ -463,7 +525,12 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan)
+    {
       p->state = RUNNABLE;
+#ifdef FRE
+      addProcessToQueue(p->pid);
+#endif /* FIFO */
+    }
 }
 
 // Wake up all processes sleeping on chan.
