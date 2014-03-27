@@ -12,6 +12,14 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+// Process Queue for FIFO
+struct {
+  struct spinlock lock;
+  struct proc *queue[NPROC];
+  int first;
+  int next;
+} pQueue;
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -20,10 +28,22 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+void addProcessToQueue(struct proc *proc);
+struct proc* getNextProcessFromQueue();
+void schedulingDEFAULT();
+void schedulingFIFO();
+
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  initlock(&pQueue.lock, "pQueue");
+  int i;
+      for(i = 0 ; i < NPROC ; i++)
+          pQueue.queue[i] = 0;
+
+  pQueue.first = 0;
+  pQueue.next  = 0;
 }
 
 //PAGEBREAK: 32
@@ -104,6 +124,9 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  #ifdef FRR
+    addProcessToQueue(p);
+  #endif /* FIFO */
 }
 
 // Grow current process's memory by n bytes.
@@ -160,6 +183,10 @@ fork(void)
  
   pid = np->pid;
   np->state = RUNNABLE;
+  #ifdef FRR
+    addProcessToQueue(np);
+  #endif /* FIFO */
+
   safestrcpy(np->name, proc->name, sizeof(proc->name));
   return pid;
 }
@@ -332,9 +359,23 @@ register_handler(sighandler_t sighandler)
 void
 scheduler(void)
 {
-  struct proc *p;
+  for(;;)
+  {
+    #ifdef DEFAULT
+             schedulingDEFAULT();
+    #endif /* DEFAULT */
 
-  for(;;){
+    #ifdef FRR
+             schedulingFIFO();
+    #endif /* FIFO */
+  }
+}
+
+#ifdef DEFAULT
+void
+schedulingDEFAULT()
+{
+    struct proc *p;
     // Enable interrupts on this processor.
     sti();
 
@@ -358,9 +399,82 @@ scheduler(void)
       proc = 0;
     }
     release(&ptable.lock);
-
-  }
 }
+#endif
+
+#ifdef FRR
+void
+schedulingFIFO()
+{
+    struct proc *p;
+
+    sti(); // need to know!
+
+    acquire(&ptable.lock);
+
+    p = getNextProcessFromQueue();
+    if (p == 0)
+    {
+        release(&ptable.lock);
+        return;
+    }
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, proc->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
+      release(&ptable.lock);
+}
+
+// FIFO - add to queue
+void addProcessToQueue(struct proc *proc)
+{
+    acquire(&pQueue.lock);
+
+    // process array is empty (full can't be)
+    if (pQueue.first ==  pQueue.next)
+    {
+        pQueue.queue[pQueue.first] = proc;
+        pQueue.next++;
+        pQueue.next = pQueue.next % NPROC;
+    }
+    else{
+        pQueue.queue[pQueue.next] = proc;
+        pQueue.next++;
+        pQueue.next = pQueue.next % NPROC;
+    }
+    release(&pQueue.lock);
+}
+
+// FIFO - remove to queue and return next proc pointers
+struct proc* getNextProcessFromQueue()
+{
+    struct proc *tempProc = 0;
+
+    acquire(&pQueue.lock);
+
+    // process array is empty (full can't be)
+    if (pQueue.first !=  pQueue.next)
+    {
+        tempProc = pQueue.queue[pQueue.first];
+        pQueue.queue[pQueue.first] = 0;
+        pQueue.first++;
+        pQueue.first = pQueue.first % NPROC;
+    }
+
+    release(&pQueue.lock);
+
+    return tempProc;
+}
+#endif /* FIFO */
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
@@ -388,6 +502,11 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
+
+  #ifdef FRR
+    addProcessToQueue(proc);
+  #endif /* FIFO */
+
   sched();
   release(&ptable.lock);
 }
@@ -458,8 +577,15 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
     if(p->state == SLEEPING && p->chan == chan)
+    {
       p->state = RUNNABLE;
+      #ifdef FRR
+        addProcessToQueue(p);
+      #endif /* FIFO */
+    }
+  }
 }
 
 // Wake up all processes sleeping on chan.
