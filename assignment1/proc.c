@@ -124,7 +124,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  #ifdef FRR
+  #if defined(FRR) ||  defined(FCFS)
     addProcessToQueue(p);
   #endif /* FIFO */
 }
@@ -183,7 +183,7 @@ fork(void)
  
   pid = np->pid;
   np->state = RUNNABLE;
-  #ifdef FRR
+  #if defined(FRR) ||  defined(FCFS)
     addProcessToQueue(np);
   #endif /* FIFO */
 
@@ -362,16 +362,15 @@ scheduler(void)
   for(;;)
   {
     #ifdef DEFAULT
-             schedulingDEFAULT();
+         schedulingDEFAULT();
     #endif /* DEFAULT */
 
-    #ifdef FRR
-             schedulingFIFO();
+    #if defined(FRR) ||  defined(FCFS)
+         schedulingFIFO();
     #endif /* FIFO */
   }
 }
 
-#ifdef DEFAULT
 void
 schedulingDEFAULT()
 {
@@ -400,9 +399,7 @@ schedulingDEFAULT()
     }
     release(&ptable.lock);
 }
-#endif
 
-#ifdef FRR
 void
 schedulingFIFO()
 {
@@ -474,7 +471,6 @@ struct proc* getNextProcessFromQueue()
 
     return tempProc;
 }
-#endif /* FIFO */
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
@@ -503,7 +499,7 @@ yield(void)
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
 
-  #ifdef FRR
+  #if defined(FRR) ||  defined(FCFS)
     addProcessToQueue(proc);
   #endif /* FIFO */
 
@@ -581,7 +577,7 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan)
     {
       p->state = RUNNABLE;
-      #ifdef FRR
+      #if defined(FRR) ||  defined(FCFS)
         addProcessToQueue(p);
       #endif /* FIFO */
     }
