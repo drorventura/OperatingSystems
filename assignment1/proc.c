@@ -16,10 +16,10 @@ struct {
 // Process Queue for FIFO
 struct {
   struct spinlock lock;
-  int queue[NPROC];
+  struct proc *queue[NPROC];
   int first;
-  int last;
-} pidQueue;
+  int next;
+} pQueue;
 
 static struct proc *initproc;
 
@@ -28,17 +28,24 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
-void addProcessToQueue(int pid);
+void addProcessToQueue(struct proc *proc);
 struct proc* getNextProcessFromQueue();
+void schedulingDEFAULT();
+void schedulingFIFO();
 
 void
 pinit(void)
 {
-  initlock(&ptable.lock, "ptable");
+    cprintf("in pinit\n");
+    uint i;
+    initlock(&ptable.lock, "ptable");
 
-  initlock(&pidQueue.lock, "pidQueue");
-  pidQueue.first = 0;
-  pidQueue.last  = 0;
+    initlock(&pQueue.lock, "pQueue");
+    for(i=0 ; i<NPROC ; i++)
+        pQueue.queue[i] = 0;
+
+    pQueue.first = 0;
+    pQueue.next  = 0;
 }
 
 //PAGEBREAK: 32
@@ -89,46 +96,9 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
-#ifdef FRR
-  // insert process to queue - FIFO
-  addProcessToQueue(p->pid); 
-#endif
-
   return p;
 }
 
-// FIFO - add to queue
-void addProcessToQueue(int pid)
-{
-    acquire(&pidQueue.lock);
-    int i = pidQueue.last;
-    pidQueue.last = i++ % NPROC;
-    pidQueue.queue[pidQueue.last] = pid;
-    release(&pidQueue.lock);
-}
-#ifdef FRR
-// FIFO - remove to queue and return next proc pointers
-struct proc* getNextProcessFromQueue()
-{
-    acquire(&pidQueue.lock);
-
-    struct proc *p = 0;
-    int i = pidQueue.first;
-    
-    for(p = ptable.proc ; p < &ptable.proc[NPROC] ; p++)
-    {
-        if(p->pid == pidQueue.queue[pidQueue.first])
-            break;
-    }
-
-    pidQueue.queue[pidQueue.first] = -1; // terminate pid
-    pidQueue.first = i++ % NPROC; // set new cyclic first position
-
-    release(&pidQueue.lock);
-
-    return p;
-}
-#endif /* FIFO */
 
 //PAGEBREAK: 32
 // Set up first user process.
@@ -155,8 +125,11 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
-
   p->state = RUNNABLE;
+
+#ifdef FRR
+  addProcessToQueue(p);
+#endif /* FIFO */ 
 }
 
 // Grow current process's memory by n bytes.
@@ -213,6 +186,11 @@ fork(void)
  
   pid = np->pid;
   np->state = RUNNABLE;
+
+#ifdef FRR
+  addProcessToQueue(np);
+#endif /* FIFO */
+
   safestrcpy(np->name, proc->name, sizeof(proc->name));
   return pid;
 }
@@ -385,26 +363,67 @@ register_handler(sighandler_t sighandler)
 void
 scheduler(void)
 {
-  struct proc *p;
+    for(;;)
+    {
 
-  for(;;){
+#ifdef DEFAULT
+         schedulingDEFAULT();
+#endif /* DEFAULT */
+
+#ifdef FRR 
+         schedulingFIFO();
+#endif /* FIFO */
+
+    }
+}
+
+#ifdef DEFAULT
+void 
+schedulingDEFAULT()
+{
+    struct proc *p;
+
     // Enable interrupts on this processor.
     sti();
-    
     acquire(&ptable.lock);
 
-// we need to make this function not to run in FRR/3Q...
-#ifndef FRR
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+        if(p->state != RUNNABLE)
+            continue;
+
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+        // before jumping back to us.
+        proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+        swtch(&cpu->scheduler, proc->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        proc = 0;
+    }
+    release(&ptable.lock);
+}
 #endif
 
 #ifdef FRR
+void 
+schedulingFIFO()
+{
+    struct proc *p;
+
+    sti(); // need to know!
+
+    acquire(&ptable.lock);
+
     p = getNextProcessFromQueue();
     if (p == 0)
-        continue;
-#endif /* FIFO */
+    {
+        release(&ptable.lock);
+        return;
+    }
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -418,12 +437,58 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-#ifndef FRR
-    }
-#endif
-    release(&ptable.lock);
-  }
+      cprintf("bla\n");
+      release(&ptable.lock);
 }
+#endif
+
+// FIFO - add to queue
+void addProcessToQueue(struct proc *proc)
+{
+    acquire(&pQueue.lock);
+    cprintf("in addProcessToQueue\n");
+    cprintf("first is : %d\n",pQueue.first);
+    cprintf("next is : %d\n\n",pQueue.next);
+
+    if (pQueue.first ==  pQueue.next){ // process array is empty (full can't be)
+        pQueue.queue[pQueue.first] = proc;
+        pQueue.next++;
+        pQueue.next = pQueue.next % NPROC;
+    }
+    else{
+        pQueue.queue[pQueue.next] = proc;
+        pQueue.next++;
+        pQueue.next = pQueue.next % NPROC;
+    }
+    cprintf("AFTER - pointer to proc is : %d\n",proc);
+    cprintf("proc address is : %d\n",pQueue.queue[0]);
+    cprintf("first is : %d\n",pQueue.first);
+    cprintf("next is : %d\n",pQueue.next);
+    release(&pQueue.lock);
+}
+
+#ifdef FRR
+// FIFO - remove to queue and return next proc pointers
+struct proc* getNextProcessFromQueue()
+{
+    struct proc *tempProc = 0;
+
+    acquire(&pQueue.lock);
+
+    // process array is empty (full can't be)
+    if (pQueue.first !=  pQueue.next)
+    {   
+        tempProc = pQueue.queue[pQueue.first];
+        pQueue.queue[pQueue.first] = 0;
+        pQueue.first++;
+        pQueue.first = pQueue.first % NPROC;
+    }
+
+    release(&pQueue.lock);
+
+    return tempProc;
+}
+#endif /* FIFO */
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state.
@@ -451,10 +516,10 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
-// FIFO - 
+
 #ifdef FRR
-  addProcessToQueue(proc->pid);
-#endif
+  addProcessToQueue(proc);
+#endif /* FIFO */
 
   sched();
   release(&ptable.lock);
@@ -527,8 +592,9 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan)
     {
       p->state = RUNNABLE;
+
 #ifdef FRE
-      addProcessToQueue(p->pid);
+      addProcessToQueue(p);
 #endif /* FIFO */
     }
 }
