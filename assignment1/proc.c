@@ -7,7 +7,6 @@
 #include "proc.h"
 #include "spinlock.h"
 
-
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -36,12 +35,11 @@ void schedulingFIFO();
 void
 pinit(void)
 {
-    cprintf("in pinit\n");
-    uint i;
     initlock(&ptable.lock, "ptable");
-
     initlock(&pQueue.lock, "pQueue");
-    for(i=0 ; i<NPROC ; i++)
+
+    int i;
+    for(i=0 ; i < NPROC ; i++)
         pQueue.queue[i] = 0;
 
     pQueue.first = 0;
@@ -99,7 +97,6 @@ found:
   return p;
 }
 
-
 //PAGEBREAK: 32
 // Set up first user process.
 void
@@ -125,8 +122,8 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
-  p->state = RUNNABLE;
 
+  p->state = RUNNABLE;
 #ifdef FRR
   addProcessToQueue(p);
 #endif /* FIFO */ 
@@ -186,7 +183,6 @@ fork(void)
  
   pid = np->pid;
   np->state = RUNNABLE;
-
 #ifdef FRR
   addProcessToQueue(np);
 #endif /* FIFO */
@@ -373,7 +369,6 @@ scheduler(void)
 #ifdef FRR 
          schedulingFIFO();
 #endif /* FIFO */
-
     }
 }
 
@@ -437,7 +432,6 @@ schedulingFIFO()
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-      cprintf("bla\n");
       release(&ptable.lock);
 }
 #endif
@@ -446,9 +440,13 @@ schedulingFIFO()
 void addProcessToQueue(struct proc *proc)
 {
     acquire(&pQueue.lock);
+    /*int i;*/
+    /*for(i=0 ; i<NPROC ; i++)
+        cprintf("%d) %d \n",i,pQueue.queue[i]);
+
     cprintf("in addProcessToQueue\n");
     cprintf("first is : %d\n",pQueue.first);
-    cprintf("next is : %d\n\n",pQueue.next);
+    cprintf("next is : %d\n\n",pQueue.next);*/
 
     if (pQueue.first ==  pQueue.next){ // process array is empty (full can't be)
         pQueue.queue[pQueue.first] = proc;
@@ -460,10 +458,13 @@ void addProcessToQueue(struct proc *proc)
         pQueue.next++;
         pQueue.next = pQueue.next % NPROC;
     }
-    cprintf("AFTER - pointer to proc is : %d\n",proc);
+    /*cprintf("AFTER - pointer to proc is : %p\n",proc);
     cprintf("proc address is : %d\n",pQueue.queue[0]);
     cprintf("first is : %d\n",pQueue.first);
     cprintf("next is : %d\n",pQueue.next);
+    for(i=0 ; i<NPROC ; i++)
+        cprintf("%d) %p \n",i,pQueue.queue[i]);
+    [>cprintf("the state is: %s\n",pQueue.queue[0]->state);<]*/
     release(&pQueue.lock);
 }
 
@@ -518,6 +519,7 @@ yield(void)
   proc->state = RUNNABLE;
 
 #ifdef FRR
+  /*cprintf("in yield\n");*/
   addProcessToQueue(proc);
 #endif /* FIFO */
 
@@ -586,16 +588,17 @@ sleep(void *chan, struct spinlock *lk)
 static void
 wakeup1(void *chan)
 {
-  struct proc *p;
+    struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     {
-      p->state = RUNNABLE;
-
-#ifdef FRE
-      addProcessToQueue(p);
-#endif /* FIFO */
+        if(p->state == SLEEPING && p->chan == chan)
+        {
+            p->state = RUNNABLE;
+        #ifdef FRE
+            addProcessToQueue(p);
+        #endif /* FIFO */
+        }
     }
 }
 
