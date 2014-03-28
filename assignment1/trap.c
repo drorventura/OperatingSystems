@@ -46,7 +46,8 @@ trap(struct trapframe *tf)
     return;
   }
 
-  switch(tf->trapno){
+  switch(tf->trapno)
+  {
   case T_IRQ0 + IRQ_TIMER:
     if(cpu->id == 0){
       acquire(&tickslock);
@@ -103,12 +104,12 @@ trap(struct trapframe *tf)
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
     exit();
 
-#ifndef FCFS
+#ifndef SCHED_FCFS
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if(proc && proc->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER)
   {
-    if(ticks - proc->ctime % QUANTA == 0)
+    if((ticks - proc->ctime) % QUANTA == 0)
         yield();
   }
 #endif

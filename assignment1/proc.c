@@ -40,10 +40,12 @@ extern void trapret(void);
 static void wakeup1(void *chan);
 
 void initQueue(pQueue * queue);
-void addProcessToQueue(pQueue *queue, struct proc *proc);
-struct proc* getNextProcessFromQueue(pQueue *queue);
+void runProc(struct proc *p);
 void schedulingDEFAULT();
 void schedulingFIFO();
+void scheduling3Q();
+void addProcessToQueue(pQueue *queue, struct proc *proc);
+struct proc* getNextProcessFromQueue(pQueue *queue);
 
 void
 pinit(void)
@@ -94,7 +96,7 @@ found:
   p->etime = 0;
   p->iotime = 0;
   p->rtime = 0;
-#ifdef SCHED3Q
+#ifdef SCHED_3Q
   p->priority = MEDIUM;
 #endif
   release(&ptable.lock);
@@ -150,9 +152,15 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  #if defined(FRR) ||  defined(FCFS)
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
     addProcessToQueue(&fifoQueue, p);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    // initproc console precedure is with low priority
+    p->priority = LOW;
+    addProcessToQueue(&priorityQueues.low, p);
+  #endif
 }
 
 // Grow current process's memory by n bytes.
@@ -209,9 +217,14 @@ fork(void)
  
   pid = np->pid;
   np->state = RUNNABLE;
-  #if defined(FRR) ||  defined(FCFS)
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
     addProcessToQueue(&fifoQueue, np);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    // all new proc's priority is MEDIUM by default
+    addProcessToQueue(&priorityQueues.medium, np);
+  #endif
 
   safestrcpy(np->name, proc->name, sizeof(proc->name));
   return pid;
@@ -258,6 +271,13 @@ exit(void)
   proc->etime = ticks;
   proc->state = ZOMBIE;
   sched();
+  int i;
+  for(i = 0 ; i < NPROC ; i++)
+  {
+    cprintf("(%d) %p\n",i, fifoQueue.queue[i]);
+  }
+  cprintf("the first: %d\n",fifoQueue.first);
+  cprintf("the next: %d\n",fifoQueue.next);
   panic("zombie exit");
 }
 
@@ -387,14 +407,31 @@ scheduler(void)
 {
   for(;;)
   {
-    #ifdef DEFAULT
-         schedulingDEFAULT();
+    #ifdef SCHED_DEFAULT
+        schedulingDEFAULT();
     #endif /* DEFAULT */
 
-    #if defined(FRR) ||  defined(FCFS)
-         schedulingFIFO();
+    #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+        schedulingFIFO();
     #endif /* FIFO */
+
+    #ifdef SCHED_3Q
+        scheduling3Q();
+    #endif
   }
+}
+
+void
+runProc(struct proc *p)
+{
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
 }
 
 void
@@ -410,14 +447,7 @@ schedulingDEFAULT()
       if(p->state != RUNNABLE)
         continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
+      runProc(p);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
@@ -425,7 +455,7 @@ schedulingDEFAULT()
     }
     release(&ptable.lock);
 }
-//I have girlfriend!! :)
+
 void
 schedulingFIFO()
 {
@@ -442,19 +472,46 @@ schedulingFIFO()
         return;
     }
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
+      runProc(p);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
       release(&ptable.lock);
+}
+
+void
+scheduling3Q()
+{
+    struct proc *p;
+
+    pQueue *queue;
+
+    sti(); // need to know!
+
+    acquire(&ptable.lock);
+
+    if(priorityQueues.high.numOfProcs)
+        queue = &priorityQueues.high;
+    else if(priorityQueues.medium.numOfProcs)
+        queue = &priorityQueues.medium;
+    else
+        queue = &priorityQueues.low;
+
+    p = getNextProcessFromQueue(queue);
+    if (p == 0)
+    {
+        release(&ptable.lock);
+        return;
+    }
+
+    runProc(p);
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+
+    release(&ptable.lock);
 }
 
 void addProcessToQueue(pQueue *queue, struct proc *proc)
@@ -528,9 +585,25 @@ yield(void)
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
 
-  #if defined(FRR) ||  defined(FCFS)
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
     addProcessToQueue(&fifoQueue, proc);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    switch(proc->priority)
+    {
+        case HIGH:
+            proc->priority = MEDIUM;
+            addProcessToQueue(&priorityQueues.medium, proc);
+            break;
+        case MEDIUM:
+            proc->priority = LOW;
+            addProcessToQueue(&priorityQueues.low, proc);
+            break;
+        default:
+            addProcessToQueue(&priorityQueues.low, proc);
+    }
+  #endif
 
   sched();
   release(&ptable.lock);
@@ -606,9 +679,25 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan)
     {
       p->state = RUNNABLE;
-      #if defined(FRR) ||  defined(FCFS)
+      #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
         addProcessToQueue(&fifoQueue, p);
       #endif /* FIFO */
+
+      #ifdef SCHED_3Q
+        switch(p->priority)
+        {
+            case MEDIUM:
+                p->priority = HIGH;
+                addProcessToQueue(&priorityQueues.high, p);
+                break;
+            case LOW:
+                p->priority = MEDIUM;
+                addProcessToQueue(&priorityQueues.medium, p);
+                break;
+            default:
+                addProcessToQueue(&priorityQueues.high, p);
+        }
+      #endif
     }
   }
 }
@@ -637,8 +726,24 @@ kill(int pid)
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
         p->state = RUNNABLE;
-      #if defined(FRR) ||  defined(FCFS)
+      #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
         addProcessToQueue(&fifoQueue, p);
+      #endif
+
+      #ifdef SCHED_3Q
+        switch(p->priority)
+        {
+            case MEDIUM:
+                p->priority = HIGH;
+                addProcessToQueue(&priorityQueues.high, p);
+                break;
+            case LOW:
+                p->priority = MEDIUM;
+                addProcessToQueue(&priorityQueues.medium, p);
+                break;
+            default:
+                addProcessToQueue(&priorityQueues.high, p);
+        }
       #endif
       release(&ptable.lock);
       return 0;
