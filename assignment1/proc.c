@@ -102,7 +102,8 @@ found:
   release(&ptable.lock);
 
   // Allocate kernel stack.
-  if((p->kstack = kalloc()) == 0){
+  if((p->kstack = kalloc()) == 0)
+  {
     p->state = UNUSED;
     return 0;
   }
@@ -472,12 +473,13 @@ schedulingFIFO()
         return;
     }
 
-      runProc(p);
+    addProcessToQueue(&fifoQueue, proc);
+    runProc(p);
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
-      release(&ptable.lock);
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+    release(&ptable.lock);
 }
 
 void
@@ -618,7 +620,8 @@ forkret(void)
   // Still holding ptable.lock from scheduler.
   release(&ptable.lock);
 
-  if (first) {
+  if (first)
+  {
     // Some initialization functions must be run in the context
     // of a regular process (e.g., they call sleep), and thus cannot 
     // be run from main().
@@ -720,31 +723,36 @@ kill(int pid)
   struct proc *p;
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->pid == pid){
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if(p->pid == pid)
+    {
       p->killed = 1;
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
+      {
         p->state = RUNNABLE;
-      #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
-        addProcessToQueue(&fifoQueue, p);
-      #endif
+        #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+          addProcessToQueue(&fifoQueue, p);
+        #endif
 
-      #ifdef SCHED_3Q
-        switch(p->priority)
-        {
-            case MEDIUM:
-                p->priority = HIGH;
-                addProcessToQueue(&priorityQueues.high, p);
-                break;
-            case LOW:
-                p->priority = MEDIUM;
-                addProcessToQueue(&priorityQueues.medium, p);
-                break;
-            default:
-                addProcessToQueue(&priorityQueues.high, p);
-        }
-      #endif
+        #ifdef SCHED_3Q
+          switch(p->priority)
+          {
+              case MEDIUM:
+                  p->priority = HIGH;
+                  addProcessToQueue(&priorityQueues.high, p);
+                  break;
+              case LOW:
+                  p->priority = MEDIUM;
+                  addProcessToQueue(&priorityQueues.medium, p);
+                  break;
+              default:
+                  addProcessToQueue(&priorityQueues.high, p);
+          }
+        #endif
+      }
+
       release(&ptable.lock);
       return 0;
     }
@@ -760,7 +768,8 @@ kill(int pid)
 void
 procdump(void)
 {
-  static char *states[] = {
+  static char *states[] =
+  {
   [UNUSED]    "unused",
   [EMBRYO]    "embryo",
   [SLEEPING]  "sleep ",
