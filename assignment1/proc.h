@@ -51,6 +51,8 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+enum procpriority { HIGH, MEDIUM, LOW };
+
 typedef void (*sighandler_t)(void);
 
 // Per-process state
@@ -72,6 +74,7 @@ struct proc {
   uint etime;                  // Process end time
   int iotime;                  // Process waiting for I/O time (the it was sleeping)
   int rtime;                   // Process running time
+  enum procpriority priority;  // Process priority queue
 };
 
 // Process memory is laid out contiguously, low addresses first:

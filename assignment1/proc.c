@@ -7,19 +7,30 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
+struct
+{
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
 
-// Process Queue for FIFO
-struct {
+// Process Queue
+typedef struct
+{
   struct spinlock lock;
   struct proc *queue[NPROC];
   int first;
   int next;
-} pQueue;
+  int numOfProcs;
+}pQueue;
 
+struct
+{
+    pQueue high;
+    pQueue medium;
+    pQueue low;
+}priorityQueues;
+
+static pQueue fifoQueue;
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -27,23 +38,38 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
-void addProcessToQueue(struct proc *proc);
-struct proc* getNextProcessFromQueue();
+
+void initQueue(pQueue * queue);
+void runProc(struct proc *p);
 void schedulingDEFAULT();
 void schedulingFIFO();
+void scheduling3Q();
+void addProcessToQueue(pQueue *queue, struct proc *proc);
+struct proc* getNextProcessFromQueue(pQueue *queue);
 
 
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  initlock(&pQueue.lock, "pQueue");
+
+  initQueue(&fifoQueue);
+  initQueue(&priorityQueues.high);
+  initQueue(&priorityQueues.medium);
+  initQueue(&priorityQueues.low);
+}
+
+void
+initQueue(pQueue * queue)
+{
+  initlock(&queue->lock, "pQueue");
   int i;
       for(i = 0 ; i < NPROC ; i++)
-          pQueue.queue[i] = 0;
+          queue->queue[i] = 0;
 
-  pQueue.first = 0;
-  pQueue.next  = 0;
+  queue->first = 0;
+  queue->next  = 0;
+  queue->numOfProcs = 0;
 }
 
 //PAGEBREAK: 32
@@ -70,7 +96,12 @@ found:
   p->ctime  = ticks;
   p->etime  = 0;
   p->iotime = 0;
-  p->rtime  = 0;
+  p->rtime = 0;
+
+#ifdef SCHED_3Q
+  p->priority = MEDIUM;
+#endif
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -124,9 +155,15 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  #if defined(FRR) || defined(FCFS)
-    addProcessToQueue(p);
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+    addProcessToQueue(&fifoQueue, p);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    // initproc console precedure is with low priority
+    p->priority = LOW;
+    addProcessToQueue(&priorityQueues.low, p);
+  #endif
 }
 
 // Grow current process's memory by n bytes.
@@ -184,9 +221,14 @@ fork(void)
   pid = np->pid;
   np->state = RUNNABLE;
 
-  #if defined(FRR) || defined(FCFS)
-    addProcessToQueue(np);
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+    addProcessToQueue(&fifoQueue, np);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    // all new proc's priority is MEDIUM by default
+    addProcessToQueue(&priorityQueues.medium, np);
+  #endif
 
   safestrcpy(np->name, proc->name, sizeof(proc->name));
   return pid;
@@ -232,8 +274,16 @@ exit(void)
   // Jump into the scheduler, never to return.
   proc->etime = ticks;
   proc->state = ZOMBIE;
+  /*int i;
+  for(i = 0 ; i < NPROC ; i++)
+  {
+    cprintf("(%d) %p\n",i, fifoQueue.queue[i]);
+  }
+  cprintf("the first: %d\n",fifoQueue.first);
+  cprintf("the next: %d\n",fifoQueue.next);
+  cprintf("proc name: %s\n",fifoQueue.queue[fifoQueue.first]->name);*/
   sched();
-  panic("zombie exit");
+  panic("I hate when zombie exit");
 }
 
 // Wait for a child process to exit and return its pid.
@@ -360,17 +410,33 @@ scheduler(void)
 {
   for(;;)
   {
-    #ifdef DEFAULT
-             schedulingDEFAULT();
+    #ifdef SCHED_DEFAULT
+        schedulingDEFAULT();
     #endif /* DEFAULT */
 
-    #if defined(FRR) || defined(FCFS)
-             schedulingFIFO();
+    #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+        schedulingFIFO();
     #endif /* FIFO */
+
+    #ifdef SCHED_3Q
+        scheduling3Q();
+    #endif
   }
 }
 
-#ifdef DEFAULT
+void
+runProc(struct proc *p)
+{
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
+}
+
 void
 schedulingDEFAULT()
 {
@@ -378,19 +444,11 @@ schedulingDEFAULT()
     // Enable interrupts on this processor.
     sti();
     acquire(&ptable.lock);
-
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-        if(p->state != RUNNABLE)
-            continue;
+      if(p->state != RUNNABLE)
+        continue;
 
-        // Switch to chosen process.  It is the process's job
-        // to release ptable.lock and then reacquire it
-        // before jumping back to us.
-        proc = p;
-        switchuvm(p);
-        p->state = RUNNING;
-        swtch(&cpu->scheduler, proc->context);
-        switchkvm();
+      runProc(p);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
@@ -398,9 +456,8 @@ schedulingDEFAULT()
     }
     release(&ptable.lock);
 }
-#endif
 
-void 
+void
 schedulingFIFO()
 {
     struct proc *p;
@@ -409,21 +466,14 @@ schedulingFIFO()
 
     acquire(&ptable.lock);
 
-    p = getNextProcessFromQueue();
+    p = getNextProcessFromQueue(&fifoQueue);
     if (p == 0)
     {
         release(&ptable.lock);
         return;
     }
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
+      runProc(p);
 
       // Process is done running for now.
       // It should have changed its p->state before coming back.
@@ -431,45 +481,79 @@ schedulingFIFO()
       release(&ptable.lock);
 }
 
-// FIFO - add to queue
-void addProcessToQueue(struct proc *proc)
+void
+scheduling3Q()
 {
-    acquire(&pQueue.lock);
+    struct proc *p;
 
-    // process array is empty (full can't be)
-    if (pQueue.first ==  pQueue.next)
+    pQueue *queue;
+
+    sti(); // need to know!
+
+    acquire(&ptable.lock);
+
+    if(priorityQueues.high.numOfProcs)
+        queue = &priorityQueues.high;
+    else if(priorityQueues.medium.numOfProcs)
+        queue = &priorityQueues.medium;
+    else
+        queue = &priorityQueues.low;
+
+    p = getNextProcessFromQueue(queue);
+    if (p == 0)
     {
-        pQueue.queue[pQueue.first] = proc;
-        pQueue.next++;
-        pQueue.next = pQueue.next % NPROC;
+        release(&ptable.lock);
+        return;
     }
-    else{
-        pQueue.queue[pQueue.next] = proc;
-        pQueue.next++;
-        pQueue.next = pQueue.next % NPROC;
-    }
-    /*for(i=0 ; i<NPROC ; i++)
-        cprintf("%d) %p\n",i,pQueue.queue[i]);*/
-    release(&pQueue.lock);
+
+    runProc(p);
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+
+    release(&ptable.lock);
 }
 
-// FIFO - remove to queue and return next proc pointers
-struct proc* getNextProcessFromQueue()
+void addProcessToQueue(pQueue *queue, struct proc *proc)
+{
+    acquire(&queue->lock);
+
+    // process array is empty (full can't be)
+    if (queue->first ==  queue->next)
+    {
+        queue->queue[queue->first] = proc;
+        queue->next++;
+        queue->next = queue->next % NPROC;
+    }
+    else
+    {
+        queue->queue[queue->next] = proc;
+        queue->next++;
+        queue->next = queue->next % NPROC;
+    }
+    queue->numOfProcs++;
+    release(&queue->lock);
+}
+
+// return next proc pointers and remove from a given queue
+struct proc* getNextProcessFromQueue(pQueue *queue)
 {
     struct proc *tempProc = 0;
 
-    acquire(&pQueue.lock);
+    acquire(&queue->lock);
 
     // process array is empty (full can't be)
-    if (pQueue.first !=  pQueue.next)
+    if (queue->first !=  queue->next)
     {
-        tempProc = pQueue.queue[pQueue.first];
-        pQueue.queue[pQueue.first] = 0;
-        pQueue.first++;
-        pQueue.first = pQueue.first % NPROC;
+        tempProc = queue->queue[queue->first];
+        queue->queue[queue->first] = 0;
+        queue->first++;
+        queue->first = queue->first % NPROC;
+        queue->numOfProcs--;
     }
 
-    release(&pQueue.lock);
+    release(&queue->lock);
 
     return tempProc;
 }
@@ -501,9 +585,25 @@ yield(void)
   acquire(&ptable.lock);  //DOC: yieldlock
   proc->state = RUNNABLE;
 
-  #if defined(FRR) || defined(FCFS)
-    addProcessToQueue(proc);
+  #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+    addProcessToQueue(&fifoQueue, proc);
   #endif /* FIFO */
+
+  #ifdef SCHED_3Q
+    switch(proc->priority)
+    {
+        case HIGH:
+            proc->priority = MEDIUM;
+            addProcessToQueue(&priorityQueues.medium, proc);
+            break;
+        case MEDIUM:
+            proc->priority = LOW;
+            addProcessToQueue(&priorityQueues.low, proc);
+            break;
+        default:
+            addProcessToQueue(&priorityQueues.low, proc);
+    }
+  #endif
 
   sched();
   release(&ptable.lock);
@@ -577,9 +677,25 @@ wakeup1(void *chan)
     if(p->state == SLEEPING && p->chan == chan)
     {
       p->state = RUNNABLE;
-      #if defined(FRR) || defined(FCFS)
-        addProcessToQueue(p);
+      #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+        addProcessToQueue(&fifoQueue, p);
       #endif /* FIFO */
+
+      #ifdef SCHED_3Q
+        switch(p->priority)
+        {
+            case MEDIUM:
+                p->priority = HIGH;
+                addProcessToQueue(&priorityQueues.high, p);
+                break;
+            case LOW:
+                p->priority = MEDIUM;
+                addProcessToQueue(&priorityQueues.medium, p);
+                break;
+            default:
+                addProcessToQueue(&priorityQueues.high, p);
+        }
+      #endif
     }
   }
 }
@@ -607,7 +723,28 @@ kill(int pid)
       p->killed = 1;
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
-        p->state = RUNNABLE;
+      {
+          p->state = RUNNABLE;
+          #if defined(SCHED_FRR) ||  defined(SCHED_FCFS)
+          addProcessToQueue(&fifoQueue, p);
+          #endif
+
+          #ifdef SCHED_3Q
+          switch(p->priority)
+          {
+              case MEDIUM:
+                  p->priority = HIGH;
+                  addProcessToQueue(&priorityQueues.high, p);
+                  break;
+              case LOW:
+                  p->priority = MEDIUM;
+                  addProcessToQueue(&priorityQueues.medium, p);
+                  break;
+              default:
+                  addProcessToQueue(&priorityQueues.high, p);
+          }
+          #endif
+      }
       release(&ptable.lock);
       return 0;
     }
@@ -637,18 +774,18 @@ procdump(void)
   uint pc[10];
   
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == UNUSED)
-      continue;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
-    if(p->state == SLEEPING){
-      getcallerpcs((uint*)p->context->ebp+2, pc);
-      for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf(" %p", pc[i]);
-    }
-    cprintf("\n");
+      if(p->state == UNUSED)
+          continue;
+      if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+          state = states[p->state];
+      else
+          state = "???";
+      cprintf("%d %s %s", p->pid, state, p->name);
+      if(p->state == SLEEPING){
+          getcallerpcs((uint*)p->context->ebp+2, pc);
+          for(i=0; i<10 && pc[i] != 0; i++)
+              cprintf(" %p", pc[i]);
+      }
+      cprintf("\n");
   }
 }
