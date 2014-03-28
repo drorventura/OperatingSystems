@@ -473,7 +473,6 @@ schedulingFIFO()
         return;
     }
 
-    addProcessToQueue(&fifoQueue, proc);
     runProc(p);
 
     // Process is done running for now.
