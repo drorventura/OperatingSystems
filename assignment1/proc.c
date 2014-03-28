@@ -7,19 +7,30 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
+struct
+{
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
 
-// Process Queue for FIFO
-struct {
+// Process Queue
+typedef struct
+{
   struct spinlock lock;
   struct proc *queue[NPROC];
   int first;
   int next;
-} pQueue;
+  int numOfProcs;
+}pQueue;
 
+struct
+{
+    pQueue high;
+    pQueue medium;
+    pQueue low;
+}priorityQueues;
+
+static pQueue fifoQueue;
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -28,8 +39,9 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-void addProcessToQueue(struct proc *proc);
-struct proc* getNextProcessFromQueue();
+void initQueue(pQueue * queue);
+void addProcessToQueue(pQueue *queue, struct proc *proc);
+struct proc* getNextProcessFromQueue(pQueue *queue);
 void schedulingDEFAULT();
 void schedulingFIFO();
 
@@ -37,13 +49,24 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  initlock(&pQueue.lock, "pQueue");
+
+  initQueue(&fifoQueue);
+  initQueue(&priorityQueues.high);
+  initQueue(&priorityQueues.medium);
+  initQueue(&priorityQueues.low);
+}
+
+void
+initQueue(pQueue * queue)
+{
+  initlock(&queue->lock, "pQueue");
   int i;
       for(i = 0 ; i < NPROC ; i++)
-          pQueue.queue[i] = 0;
+          queue->queue[i] = 0;
 
-  pQueue.first = 0;
-  pQueue.next  = 0;
+  queue->first = 0;
+  queue->next  = 0;
+  queue->numOfProcs = 0;
 }
 
 //PAGEBREAK: 32
@@ -71,6 +94,9 @@ found:
   p->etime = 0;
   p->iotime = 0;
   p->rtime = 0;
+#ifdef SCHED3Q
+  p->priority = MEDIUM;
+#endif
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -125,7 +151,7 @@ userinit(void)
 
   p->state = RUNNABLE;
   #if defined(FRR) ||  defined(FCFS)
-    addProcessToQueue(p);
+    addProcessToQueue(&fifoQueue, p);
   #endif /* FIFO */
 }
 
@@ -184,7 +210,7 @@ fork(void)
   pid = np->pid;
   np->state = RUNNABLE;
   #if defined(FRR) ||  defined(FCFS)
-    addProcessToQueue(np);
+    addProcessToQueue(&fifoQueue, np);
   #endif /* FIFO */
 
   safestrcpy(np->name, proc->name, sizeof(proc->name));
@@ -399,7 +425,7 @@ schedulingDEFAULT()
     }
     release(&ptable.lock);
 }
-
+//I have girlfriend!! :)
 void
 schedulingFIFO()
 {
@@ -409,7 +435,7 @@ schedulingFIFO()
 
     acquire(&ptable.lock);
 
-    p = getNextProcessFromQueue();
+    p = getNextProcessFromQueue(&fifoQueue);
     if (p == 0)
     {
         release(&ptable.lock);
@@ -431,43 +457,46 @@ schedulingFIFO()
       release(&ptable.lock);
 }
 
-// FIFO - add to queue
-void addProcessToQueue(struct proc *proc)
+void addProcessToQueue(pQueue *queue, struct proc *proc)
 {
-    acquire(&pQueue.lock);
+    acquire(&queue->lock);
 
     // process array is empty (full can't be)
-    if (pQueue.first ==  pQueue.next)
+    if (queue->first ==  queue->next)
     {
-        pQueue.queue[pQueue.first] = proc;
-        pQueue.next++;
-        pQueue.next = pQueue.next % NPROC;
+        queue->queue[queue->first] = proc;
+        queue->next++;
+        queue->next = queue->next % NPROC;
     }
-    else{
-        pQueue.queue[pQueue.next] = proc;
-        pQueue.next++;
-        pQueue.next = pQueue.next % NPROC;
+    else
+    {
+        queue->queue[queue->next] = proc;
+        queue->next++;
+        queue->next = queue->next % NPROC;
     }
-    release(&pQueue.lock);
+
+    queue->numOfProcs++;
+    release(&queue->lock);
 }
 
-// FIFO - remove to queue and return next proc pointers
-struct proc* getNextProcessFromQueue()
+// return next proc pointers and remove from a given queue
+struct proc* getNextProcessFromQueue(pQueue *queue)
 {
     struct proc *tempProc = 0;
 
-    acquire(&pQueue.lock);
+    acquire(&queue->lock);
 
     // process array is empty (full can't be)
-    if (pQueue.first !=  pQueue.next)
+    if (queue->first !=  queue->next)
     {
-        tempProc = pQueue.queue[pQueue.first];
-        pQueue.queue[pQueue.first] = 0;
-        pQueue.first++;
-        pQueue.first = pQueue.first % NPROC;
+        tempProc = queue->queue[queue->first];
+        queue->queue[queue->first] = 0;
+        queue->first++;
+        queue->first = queue->first % NPROC;
+        queue->numOfProcs--;
     }
 
-    release(&pQueue.lock);
+    release(&queue->lock);
 
     return tempProc;
 }
@@ -500,7 +529,7 @@ yield(void)
   proc->state = RUNNABLE;
 
   #if defined(FRR) ||  defined(FCFS)
-    addProcessToQueue(proc);
+    addProcessToQueue(&fifoQueue, proc);
   #endif /* FIFO */
 
   sched();
@@ -578,7 +607,7 @@ wakeup1(void *chan)
     {
       p->state = RUNNABLE;
       #if defined(FRR) ||  defined(FCFS)
-        addProcessToQueue(p);
+        addProcessToQueue(&fifoQueue, p);
       #endif /* FIFO */
     }
   }
@@ -608,6 +637,9 @@ kill(int pid)
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
         p->state = RUNNABLE;
+      #if defined(FRR) ||  defined(FCFS)
+        addProcessToQueue(&fifoQueue, p);
+      #endif
       release(&ptable.lock);
       return 0;
     }
