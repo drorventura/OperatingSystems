@@ -97,10 +97,8 @@ found:
   p->etime  = 0;
   p->iotime = 0;
   p->rtime = 0;
-
-#ifdef SCHED_3Q
+  p->procTicks = 0;
   p->priority = MEDIUM;
-#endif
 
   release(&ptable.lock);
 
@@ -162,8 +160,8 @@ userinit(void)
 
   #ifdef SCHED_3Q
     // initproc console precedure is with low priority
-    p->priority = LOW;
-    addProcessToQueue(&priorityQueues.low, p);
+    p->priority = MEDIUM;
+    addProcessToQueue(&priorityQueues.medium, p);
   #endif
 }
 

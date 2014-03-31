@@ -43,6 +43,8 @@ trap(struct trapframe *tf)
     syscall();
     //return for IO
 
+//    proc->procTicks = 0;
+
     if(proc->killed)
       exit();
     return;
@@ -54,7 +56,10 @@ trap(struct trapframe *tf)
     if(cpu->id == 0){
       acquire(&tickslock);
       if(proc && proc->state == RUNNING)
+      {
         proc->rtime++;
+        proc->procTicks++;
+      }
       updateAllSleepingProcesses();
       ticks++;
       wakeup(&ticks);
@@ -111,9 +116,11 @@ trap(struct trapframe *tf)
   // If interrupts were on while locks held, would need to check nlock.
   if(proc && proc->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER)
   {
-    /*if(proc->priority != LOW && (ticks - proc->ctime) % QUANTA == 0)*/
-    if(proc->priority != LOW && ticks % QUANTA == 0)
+    if(proc->priority != LOW && proc->procTicks == QUANTA)
+    {
+        proc->procTicks = 0;
         yield();
+    }
   }
 #endif
 
