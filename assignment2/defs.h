@@ -22,7 +22,6 @@ void            panic(char*) __attribute__((noreturn));
 
 // exec.c
 int             exec(char*, char**);
-int             add_path(char* path);
 
 // file.c
 struct file*    filealloc(void);
@@ -117,8 +116,6 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-void            updateAllSleepingProcesses(void);
-int             wait2(int *wtime, int *rtime, int *iotime);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -140,7 +137,6 @@ char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
-char*           strcat(char *dest, const char *src);
 
 // syscall.c
 int             argint(int, int*);

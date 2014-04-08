@@ -51,10 +51,6 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-enum procpriority { HIGH, MEDIUM, LOW };
-
-typedef void (*sighandler_t)(void);
-
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -70,12 +66,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-  uint ctime;                  // Process creation time
-  uint etime;                  // Process end time
-  int iotime;                  // Process waiting for I/O time (the it was sleeping)
-  int rtime;                   // Process running time
-  int procTicks;               // Process ticks
-  enum procpriority priority;  // Process priority queue
+  int pending;                 // Represents all currently unhandled (pending) signals
 };
 
 // Process memory is laid out contiguously, low addresses first:

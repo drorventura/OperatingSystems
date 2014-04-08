@@ -1,50 +1,24 @@
+#define THREAD_QUANTA 5
 
-/********************************
-	Macors which inline assembly
- ********************************/
+/* Possible states of a thread; */
+typedef enum  {T_FREE, T_RUNNING, T_RUNNABLE, T_SLEEPING} uthread_state;
+
+#define STACK_SIZE  4096
+#define MAX_THREAD  64
+
+typedef struct uthread uthread_t, *uthread_p;
+
+struct uthread {
+	int				tid;
+	int 	       	esp;        /* current stack pointer */
+	int 	       	ebp;        /* current base pointer */
+	char		   *stack;	    /* the thread's stack */
+	uthread_state   state;     	/* running, runnable, sleeping */
+};
  
-// Saves the value of esp to var
-#define STORE_ESP(var) 	asm("movl %%esp, %0;" : "=r" ( var ))
-
-// Loads the contents of var into esp
-#define LOAD_ESP(var) 	asm("movl %0, %%esp;" : : "r" ( var ))
-
-// Calls the function func
-#define CALL(addr)		asm("call *%0;" : : "r" ( addr ))
-
-// Pushes the contents of var to the stack
-#define PUSH(var)		asm("movl %0, %%edi; push %%edi;" : : "r" ( var ))
-
-
-
-#define MAX_UTHREADS 64
-
-// Represents a ULT. 
-// Feel free to extend this definition as needed.
-typedef struct
-{
-	int tid;				// A unique thread ID within the process
-	void *ss_sp;		// Stack base or pointer
-	size_t ss_size;	// Stack size
-	int priority;		// The priority of the thread 0…9 (0 is highest)
-} uthread_t;
-
-// A function that wraps the entry functipn of a thread.
-// This is just a siggestion, fell free to modify it as needed.
-void wrap_function(void (*entry)())
-{
-  entry();
-  uthread_exit();
-}
-
-/********************************
-	The API of the ULT package
- ********************************/
- 
-int uthread_create(void (*start_func)(), int priority);
-void uthread_yield();
-void uthread_exit();
-int uthread_start_all();
-int uthread_setpr(int priority);
-int uthread_getpr();
-uthread_t uthread_self();
+void uthread_init(void);
+int  uthread_create(void (*func)(void *), void* value);
+void uthread_exit(void);
+void uthread_yield(void);
+int  uthred_self(void);
+int  uthred_join(int tid);

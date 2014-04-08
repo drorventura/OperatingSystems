@@ -7,28 +7,6 @@
 #include "x86.h"
 #include "elf.h"
 
-#define MAX_PATH_ENTRIES 10
-#define INPUT_BUF 128
-
-char pathsEnv[MAX_PATH_ENTRIES][INPUT_BUF];
-int nextPathPosition = 0;
-
-// {{0},{0},{0},{0},{0},{0},{0},{0},{0},{0}}
-//char ** pathsEnv = (char**) kalloc (MAX_PATH_ENTRIES * sizeof(char *));
-//char ** pathsEnv;
-
-int
-add_path(char* path)
-{
-    if(nextPathPosition < MAX_PATH_ENTRIES)
-    {
-        strncpy(pathsEnv[nextPathPosition], path , strlen(path));
-        nextPathPosition++;
-        return 0;
-    }
-    return -1;
-}
-
 int
 exec(char *path, char **argv)
 {
@@ -40,25 +18,10 @@ exec(char *path, char **argv)
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
 
-  char newPath[INPUT_BUF] = {0};
-
   if((ip = namei(path)) == 0)
-  {
-    int i;
-    for(i = 0 ; i < nextPathPosition ; i++)
-    {
-        strncpy(newPath ,pathsEnv[i], strlen(pathsEnv[i]));
-        strcat(newPath,path);
-        if((ip = namei(newPath)) != 0)
-            break;
-    }
-    if(!ip)
-        return -1;
-  }
-
+    return -1;
   ilock(ip);
   pgdir = 0;
-
 
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
@@ -71,8 +34,7 @@ exec(char *path, char **argv)
 
   // Load program into memory.
   sz = 0;
-  for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph))
-  {
+  for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
     if(ph.type != ELF_PROG_LOAD)

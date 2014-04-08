@@ -22,8 +22,6 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int add_path(char* path);
-int wait2(int *wtime, int *rtime, int *iotime);
 
 // ulib.c
 int stat(char*, struct stat*);
@@ -31,8 +29,6 @@ char* strcpy(char*, char*);
 void *memmove(void*, void*, int);
 char* strchr(const char*, char c);
 int strcmp(const char*, const char*);
-char* strtok(char *teststr, char ch);
-
 void printf(int, char*, ...);
 char* gets(char*, int max);
 uint strlen(char*);

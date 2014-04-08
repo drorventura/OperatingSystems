@@ -14,22 +14,9 @@
 #include "proc.h"
 #include "x86.h"
 
-#define MAX_HISTORY_LENGTH 20
-#define INPUT_BUF 128
-
-char historyBuf[MAX_HISTORY_LENGTH][INPUT_BUF];
-int history_index = 0;
-int history_index_pos = 0;
-int historyFlag = 0;
-int historyCounter = 0;
-int bufIndex = 0;
-
 static void consputc(int);
 
 static int panicked = 0;
-void fixPrintWhenLeftKeyIsPressed();
-void killLine(void);
-void loadHistoryToScreen(int c);
 
 static struct {
   struct spinlock lock;
@@ -136,18 +123,14 @@ panic(char *s)
 
 //PAGEBREAK: 50
 #define BACKSPACE 0x100
-#define CRTPORT   0x3d4
-#define KEY_LF    0xE4
-#define KEY_RT    0xE5
-#define KEY_UP    0xE2
-#define KEY_DN    0xE3
+#define CRTPORT 0x3d4
 static ushort *crt = (ushort*)P2V(0xb8000);  // CGA memory
 
 static void
 cgaputc(int c)
 {
   int pos;
-
+  
   // Cursor position: col + 80*row.
   outb(CRTPORT, 14);
   pos = inb(CRTPORT+1) << 8;
@@ -158,15 +141,7 @@ cgaputc(int c)
     pos += 80 - pos%80;
   else if(c == BACKSPACE){
     if(pos > 0) --pos;
-  }
-  else if(c == KEY_LF)
-  {
-    if(pos > 0) --pos;
-  }
-  else if(c == KEY_RT){
-    ++pos;
-  }
-  else
+  } else
     crt[pos++] = (c&0xff) | 0x0700;  // black on white
   
   if((pos/80) >= 24){  // Scroll up.
@@ -179,10 +154,7 @@ cgaputc(int c)
   outb(CRTPORT+1, pos>>8);
   outb(CRTPORT, 15);
   outb(CRTPORT+1, pos);
-  if(c == BACKSPACE)
-    crt[pos] = ' ' | 0x0700;
-  else
-    crt[pos] = crt[pos] | 0x0700;
+  crt[pos] = ' ' | 0x0700;
 }
 
 void
@@ -196,12 +168,7 @@ consputc(int c)
 
   if(c == BACKSPACE){
     uartputc('\b'); uartputc(' '); uartputc('\b');
-  }
-  else if(c == KEY_LF || c == KEY_RT)
-  {
-
-  }
-  else
+  } else
     uartputc(c);
   cgaputc(c);
 }
@@ -217,13 +184,10 @@ struct {
 
 #define C(x)  ((x)-'@')  // Control-x
 
-static int leftClicksCounter = 0;
-
 void
 consoleintr(int (*getc)(void))
 {
   int c;
-  int i = 0;
 
   acquire(&input.lock);
   while((c = getc()) >= 0){
@@ -239,149 +203,25 @@ consoleintr(int (*getc)(void))
       }
       break;
     case C('H'): case '\x7f':  // Backspace
-      if(input.e != input.w)
-      {
+      if(input.e != input.w){
         input.e--;
         consputc(BACKSPACE);
       }
       break;
-    case KEY_LF:               // left arrow
-      if(input.e != input.w)
-      {
-        consputc(KEY_LF);
-        leftClicksCounter++;
-        input.e--;
-      }
-      break;
-    case KEY_RT:               // right arrow
-      if(leftClicksCounter > 0)
-      {
-        consputc(KEY_RT);
-        leftClicksCounter--;
-        input.e++;
-        input.e = input.e % INPUT_BUF;
-      }
-      break;
-    case KEY_UP :
-
-      if (historyCounter == 0)
-          break;
-      if (!historyFlag) {
-          killLine();
-          loadHistoryToScreen(c);  
-          historyFlag= 1;
-          break;
-      }
-      else if (history_index_pos != 0)
-      {
-          history_index_pos--;
-          history_index_pos = history_index_pos % MAX_HISTORY_LENGTH;
-
-      }
-      else  if (history_index_pos == 0 && 
-                 historyCounter == MAX_HISTORY_LENGTH)
-      {
-          history_index_pos = MAX_HISTORY_LENGTH -1;
-
-      } else if (history_index_pos == 0 && 
-                 historyCounter != MAX_HISTORY_LENGTH)
-      {
-          history_index_pos = history_index -1;
-      }
-          killLine();
-          loadHistoryToScreen(c);  
-      break;
-    
-    case KEY_DN :
-      if (historyFlag && history_index_pos != history_index - 1)
-      {
-          history_index_pos++;
-          history_index_pos = history_index_pos % MAX_HISTORY_LENGTH;
-          killLine();
-          loadHistoryToScreen(c);  
-      }
-      break;
-    
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
-
-        if(c == '\n') //fix the input.e index when enter is pressed and resets leftCount
-        {
-            input.e = (input.e + leftClicksCounter) % INPUT_BUF;
-            leftClicksCounter = 0;
-        }
-        else if(leftClicksCounter > 0)
-        {
-            leftClicksCounter--;
-        }
-
         input.buf[input.e++ % INPUT_BUF] = c;
         consputc(c);
-
         if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
-            i = input.r;
-            bufIndex = 0;
-            while(i != input.e)
-            {
-                historyBuf[history_index % MAX_HISTORY_LENGTH][bufIndex] = input.buf[i % INPUT_BUF];
-                i++;
-                bufIndex++;
-            }
           input.w = input.e;
           wakeup(&input.r);
-
-          // check if user enter just NEWLINE - we dont want save in history
-          if (bufIndex == 1)
-          {
-              if (historyBuf[history_index % MAX_HISTORY_LENGTH][0] == '\n')
-                  break;
-          }
-
-          if (historyCounter != MAX_HISTORY_LENGTH)
-              historyCounter++;
-
-          history_index_pos = history_index % MAX_HISTORY_LENGTH;
-          history_index++;
-          history_index = history_index % MAX_HISTORY_LENGTH;
-          historyFlag = 0;
         }
       }
       break;
     }
   }
   release(&input.lock);
-}
-
-//kill line
-void killLine(void)
-{
-
-    while(input.e != input.w &&
-            input.buf[(input.e-1) % INPUT_BUF] != '\n'){
-        input.e--;
-        consputc(BACKSPACE);
-    }
-}
-
-void loadHistoryToScreen(int c)
-{
-    int i = 0;
-    while( historyBuf[history_index_pos][i] != '\n')
-    {
-
-        c = historyBuf[history_index_pos][i];
-        if(c != 0 && input.e-input.r < INPUT_BUF){
-            c = (c == '\r') ? '\n' : c;
-            input.buf[input.e++ % INPUT_BUF] = c;
-            consputc(c);
-            if(c == '\n' || c == C('D') || input.e == input.r+INPUT_BUF){
-                input.w = input.e;
-                wakeup(&input.r);
-            }
-        }
-        i++;
-    }
 }
 
 int

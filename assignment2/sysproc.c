@@ -88,30 +88,3 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
-
-int
-sys_add_path(void)
-{
-  char ** pathPtr = 0;
-  if(argstr(0,pathPtr) < 0)
-    return -1;
-
-  return add_path(*pathPtr);
-}
-
-int
-sys_wait2(void)
-{
-  int wtime;
-  int rtime;
-  int iotime;
-
-  if(argint(0, &wtime) < 0)
-    return -1;
-  if(argint(1, &rtime) < 0)
-    return -1;
-  if(argint(2, &iotime) < 0)
-    return -1;
-
-  return wait2((int *) wtime,(int *) rtime,(int *) iotime);
-}
