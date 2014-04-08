@@ -15,6 +15,10 @@ struct {
 
 static struct proc *initproc;
 
+struct {
+    sighandler_t sigHandlers[32];
+}signalHandlers;
+
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
@@ -22,9 +26,20 @@ extern void trapret(void);
 static void wakeup1(void *chan);
 
 void
+defaultHandler(void)
+{
+    cprintf("A signal was accepted by process %d", proc->pid);
+}
+
+void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  int i;
+  for(i = 0 ; i < 32 ; i++)
+  {
+    sigHandlers[i] = &defaultHandler;
+  }
 }
 
 //PAGEBREAK: 32
@@ -48,6 +63,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->pending = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack.

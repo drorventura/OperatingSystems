@@ -74,6 +74,7 @@ struct proc {
   uint etime;                  // Process end time
   int iotime;                  // Process waiting for I/O time (the it was sleeping)
   int rtime;                   // Process running time
+  int procTicks;               // Process ticks
   enum procpriority priority;  // Process priority queue
 };
 
