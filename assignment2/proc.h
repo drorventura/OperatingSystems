@@ -66,10 +66,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
-<<<<<<< HEAD
-=======
   int pending;                 // Represents all currently unhandled (pending) signals
->>>>>>> ed274dcd435e60d3e037788bd0df77cfb32cef62
 };
 
 // Process memory is laid out contiguously, low addresses first:

@@ -16,7 +16,7 @@ struct {
 static struct proc *initproc;
 
 struct {
-    sighandler_t sigHandlers[32];
+    sighandler_t sigArr[32];
 }signalHandlers;
 
 int nextpid = 1;
@@ -25,21 +25,17 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-void
-defaultHandler(void)
-{
-    cprintf("A signal was accepted by process %d", proc->pid);
-}
+void defaultHandler(void);
+
 
 void
 pinit(void)
 {
-  initlock(&ptable.lock, "ptable");
   int i;
-  for(i = 0 ; i < 32 ; i++)
-  {
-    sigHandlers[i] = &defaultHandler;
-  }
+  initlock(&ptable.lock, "ptable");
+
+  for(i = 0 ; i < 32 ; i++) // 1.1
+    signalHandlers.sigArr[i] = &defaultHandler;
 }
 
 //PAGEBREAK: 32
@@ -491,3 +487,21 @@ procdump(void)
 }
 
 
+// Handlers for signals
+void
+defaultHandler(void)
+{
+    cprintf("A signal was accepted by process %d", proc->pid);
+}
+
+// signal - System Call 2/1.2
+int signal(int signum, sighandler_t handler)
+{   
+    if(handler)
+    {
+        signalHandlers.sigArr[signum] = handler;
+        return 0;
+    }
+    return -1;
+
+}
