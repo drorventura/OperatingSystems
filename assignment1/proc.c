@@ -162,7 +162,6 @@ userinit(void)
 
   #ifdef SCHED_3Q
     // initproc console precedure is with low priority
-    p->priority = LOW;
     addProcessToQueue(&priorityQueues.low, p);
   #endif
 }
