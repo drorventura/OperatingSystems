@@ -21,4 +21,5 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
-#define SYS_signal 22 // 2/1.2
+#define SYS_signal 22   // 2/1.2
+#define SYS_sigsend 23  // 2/1.3

@@ -15,9 +15,9 @@ struct {
 
 static struct proc *initproc;
 
-struct {
-    sighandler_t sigArr[32];
-}signalHandlers;
+int signal(int signum, sighandler_t handler);   // 2/1.2
+int sigsend(int pid, int signum);               // 2/1.3
+
 
 int nextpid = 1;
 extern void forkret(void);
@@ -31,11 +31,7 @@ void defaultHandler(void);
 void
 pinit(void)
 {
-  int i;
   initlock(&ptable.lock, "ptable");
-
-  for(i = 0 ; i < 32 ; i++) // 1.1
-    signalHandlers.sigArr[i] = &defaultHandler;
 }
 
 //PAGEBREAK: 32
@@ -48,6 +44,7 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
+  int i;
 
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
@@ -60,6 +57,12 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->pending = 0;
+  
+  // initialize signals Handlers array all to NULL,
+  // then, if NULL than will run defaultHandler. 2/1.1
+  for(i = 0 ; i < 32 ; i++) // 1.1
+      p->sigArr[i] = 0;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -499,9 +502,32 @@ int signal(int signum, sighandler_t handler)
 {   
     if(handler)
     {
-        signalHandlers.sigArr[signum] = handler;
+        proc->sigArr[signum] = handler;
         return 0;
     }
     return -1;
+}
 
+// sigsend - System Call 2/1.3
+int sigsend(int pid, int signum)
+{   
+    int i;
+    int signal = 1;
+
+    if(signum > 32)
+        return -1;
+
+    for(i = 0 ;  i < NPROC ; i++)
+    {
+        if ( (ptable.proc[i].pid = pid) )
+        {
+            if (signum != 0)
+            {
+                signal = signal << (signum - 1);              // set numebr with shl
+                proc->pending = proc->pending | signal; // updating pending variable with new signal
+                return 0;
+            }
+        }
+    }
+    return -1;
 }

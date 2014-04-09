@@ -50,6 +50,7 @@ struct context {
 };
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+typedef void (*sighandler_t)(void);
 
 // Per-process state
 struct proc {
@@ -67,6 +68,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int pending;                 // Represents all currently unhandled (pending) signals
+  sighandler_t sigArr[32];     // array of signals Handlers pointers NULL is treated as defaultHandler
 };
 
 // Process memory is laid out contiguously, low addresses first:

@@ -30,3 +30,4 @@ SYSCALL(sbrk)
 SYSCALL(sleep)
 SYSCALL(uptime)
 SYSCALL(signal) // 2/1.2
+SYSCALL(sigsend) // 2/1.3
