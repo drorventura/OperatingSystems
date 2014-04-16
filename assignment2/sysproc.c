@@ -88,3 +88,25 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+// A process wishing to register a custom handler for a specific 
+// signal will use the following system call 2/1.2 
+int sys_signal(void)
+{
+    int signum = 0;
+    int handler = 0; 
+
+    if((argint(0,&signum) < 0) || (argint(1,&signum) < 0))
+        return -1;
+    return signal(signum,(sighandler_t)handler);
+}
+
+//add the ability to send a signal to a process 2/1.3
+int sys_sigsend(void)
+{
+    int pid= 0;
+    int signum = 0; 
+
+    if((argint(0,&signum) < 0) || (argint(1,&signum) < 0))
+        return -1;
+    return sigsend(pid,signum);
+}

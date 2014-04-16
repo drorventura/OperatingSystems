@@ -116,6 +116,11 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+typedef void (*sighandler_t)(void);
+int signal(int signum, sighandler_t handler);   // 2/1.2
+int sigsend(int pid, int signum);               // 2/1.3
+
+
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -179,3 +184,4 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+

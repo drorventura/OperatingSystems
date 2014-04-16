@@ -15,9 +15,9 @@ struct {
 
 static struct proc *initproc;
 
-struct {
-    sighandler_t sigHandlers[32];
-}signalHandlers
+int signal(int signum, sighandler_t handler);   // 2/1.2
+int sigsend(int pid, int signum);               // 2/1.3
+
 
 int nextpid = 1;
 extern void forkret(void);
@@ -25,21 +25,13 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-void
-defaultHandler(void)
-{
-    cprintf("A signal was accepted by process %d", proc->pid);
-}
+void defaultHandler(void);
+
 
 void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
-  int i;
-  for(i = 0 : i < 32 ; i++)
-  {
-    sigHandlers[i] = &defaultHandler;
-  }
 }
 
 //PAGEBREAK: 32
@@ -52,6 +44,7 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
+  int i;
 
   acquire(&ptable.lock);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
@@ -64,6 +57,12 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->pending = 0;
+  
+  // initialize signals Handlers array all to NULL,
+  // then, if NULL than will run defaultHandler. 2/1.1
+  for(i = 0 ; i < 32 ; i++) // 1.1
+      p->sigArr[i] = 0;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -162,6 +161,12 @@ fork(void)
   np->sz = proc->sz;
   np->parent = proc;
   *np->tf = *proc->tf;
+
+
+  // updating child pending and array Handlers like hisp parent
+  // 2/1.5
+  np->pending = proc->pending;
+  *np->sigArr  = *proc->sigArr;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -291,34 +296,39 @@ register_handler(sighandler_t sighandler)
 void
 scheduler(void)
 {
-  struct proc *p;
+    struct proc *p;
 
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
+    for(;;){
+        // Enable interrupts on this processor.
+        sti();
 
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+        // Loop over process table looking for process to run.
+        acquire(&ptable.lock);
+        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+            if(p->state != RUNNABLE)
+                continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
+            // Switch to chosen process.  It is the process's job
+            // to release ptable.lock and then reacquire it
+            // before jumping back to us.
+            proc = p;
+            switchuvm(p);
+            p->state = RUNNING;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
+            // 2/1.4 TODO
+            // Kobi suggest that we should check here if process pending is changed (pending != 0)
+            // if so, to call register_handler as given in question.
+
+
+            swtch(&cpu->scheduler, proc->context);
+            switchkvm();
+
+            // Process is done running for now.
+            // It should have changed its p->state before coming back.
+            proc = 0;
+        }
+        release(&ptable.lock);
     }
-    release(&ptable.lock);
-
-  }
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -491,3 +501,44 @@ procdump(void)
 }
 
 
+// Handlers for signals
+void
+defaultHandler(void)
+{
+    cprintf("A signal was accepted by process %d", proc->pid);
+}
+
+// signal - System Call 2/1.2
+int signal(int signum, sighandler_t handler)
+{   
+    if(handler)
+    {
+        proc->sigArr[signum] = handler;
+        return 0;
+    }
+    return -1;
+}
+
+// sigsend - System Call 2/1.3
+int sigsend(int pid, int signum)
+{   
+    int i;
+    int signal = 1;
+
+    if(signum > 32)
+        return -1;
+
+    for(i = 0 ;  i < NPROC ; i++)
+    {
+        if ( (ptable.proc[i].pid = pid) )
+        {
+            if (signum != 0)
+            {
+                signal = signal << (signum - 1);              // set numebr with shl
+                proc->pending = proc->pending | signal; // updating pending variable with new signal
+                return 0;
+            }
+        }
+    }
+    return -1;
+}

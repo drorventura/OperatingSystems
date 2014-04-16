@@ -1,3 +1,5 @@
+#include "signal.h"
+
 // Segments in proc->gdt.
 #define NSEGS     7
 
@@ -67,6 +69,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int pending;                 // Represents all currently unhandled (pending) signals
+  sighandler_t sigArr[32];     // array of signals Handlers pointers NULL is treated as defaultHandler
 };
 
 // Process memory is laid out contiguously, low addresses first:
