@@ -8,18 +8,19 @@
 #define SYS_exec    7
 #define SYS_fstat   8
 #define SYS_chdir   9
-#define SYS_dup    10
-#define SYS_getpid 11
-#define SYS_sbrk   12
-#define SYS_sleep  13
-#define SYS_uptime 14
+#define SYS_dup     10
+#define SYS_getpid  11
+#define SYS_sbrk    12
+#define SYS_sleep   13
+#define SYS_uptime  14
 
-#define SYS_open   15
-#define SYS_write  16
-#define SYS_mknod  17
-#define SYS_unlink 18
-#define SYS_link   19
-#define SYS_mkdir  20
-#define SYS_close  21
-#define SYS_signal 22   // 2/1.2
+#define SYS_open    15
+#define SYS_write   16
+#define SYS_mknod   17
+#define SYS_unlink  18
+#define SYS_link    19
+#define SYS_mkdir   20
+#define SYS_close   21
+#define SYS_signal  22   // 2/1.2
 #define SYS_sigsend 23  // 2/1.3
+#define SYS_alarm   24  // 2/1.6

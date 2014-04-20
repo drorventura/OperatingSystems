@@ -116,11 +116,11 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-typedef void (*sighandler_t)(void);
-int signal(int signum, sighandler_t handler);   // 2/1.2
-int sigsend(int pid, int signum);               // 2/1.3
-
-
+typedef void    (*sighandler_t)(void);
+int             signal(int signum, sighandler_t handler);   // 2/1.2
+int             sigsend(int pid, int signum);               // 2/1.3
+void            alarm(int ticks);                           // 1.6
+void            updateAllAlarmedProcesses(void);            // 1.6
 
 // swtch.S
 void            swtch(struct context**, struct context*);

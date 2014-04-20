@@ -8,7 +8,8 @@
 #include "spinlock.h"
 #include "signal.h"
 
-struct {
+struct
+{
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
@@ -17,7 +18,7 @@ static struct proc *initproc;
 
 int signal(int signum, sighandler_t handler);   // 2/1.2
 int sigsend(int pid, int signum);               // 2/1.3
-
+void alarm(int ticks);                          // 2/1.6
 
 int nextpid = 1;
 extern void forkret(void);
@@ -57,10 +58,12 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->pending = 0;
+  p->isAlarmed = 0;         // init the alarm flag to be false
+  p->alarmTickCount = 0;    // init the ticks counter af the alarm
   
   // initialize signals Handlers array all to NULL,
   // then, if NULL than will run defaultHandler. 2/1.1
-  for(i = 0 ; i < 32 ; i++) // 1.1
+  for(i = 0 ; i < NUMSIG ; i++) // 1.1
       p->sigArr[i] = 0;
 
   release(&ptable.lock);
@@ -162,8 +165,7 @@ fork(void)
   np->parent = proc;
   *np->tf = *proc->tf;
 
-
-  // updating child pending and array Handlers like hisp parent
+  // updating child pending and array Handlers like his parent
   // 2/1.5
   np->pending = proc->pending;
   *np->sigArr  = *proc->sigArr;
@@ -315,10 +317,21 @@ scheduler(void)
             switchuvm(p);
             p->state = RUNNING;
 
-            // 2/1.4 TODO
-            // Kobi suggest that we should check here if process pending is changed (pending != 0)
-            // if so, to call register_handler as given in question.
-
+            // 2/1.4
+            int i;
+            int signal;
+            for(i=0 ; i < NUMSIG ; i++)
+            {
+                signal = 1 << i;
+                if((p->pending & signal) == signal)
+                {
+                    p->pending = p->pending - signal;
+                    if(p->sigArr[i])
+                        register_handler(p->sigArr[i]);
+                    else
+                        defaultHandler();
+                }
+            }
 
             swtch(&cpu->scheduler, proc->context);
             switchkvm();
@@ -500,12 +513,11 @@ procdump(void)
   }
 }
 
-
 // Handlers for signals
 void
 defaultHandler(void)
 {
-    cprintf("A signal was accepted by process %d", proc->pid);
+    cprintf("A signal was accepted by process %d\n", proc->pid);
 }
 
 // signal - System Call 2/1.2
@@ -525,20 +537,57 @@ int sigsend(int pid, int signum)
     int i;
     int signal = 1;
 
-    if(signum > 32)
+    if(signum > NUMSIG)
         return -1;
 
     for(i = 0 ;  i < NPROC ; i++)
     {
-        if ( (ptable.proc[i].pid = pid) )
+        if ( ptable.proc[i].pid == pid )
         {
             if (signum != 0)
             {
-                signal = signal << (signum - 1);              // set numebr with shl
-                proc->pending = proc->pending | signal; // updating pending variable with new signal
+                signal = signal << signum;                  // set numebr with shl
+                proc->pending = proc->pending | signal;     // updating pending variable with new signal
                 return 0;
             }
         }
     }
     return -1;
+}
+
+void alarm(int ticks)
+{
+//    cprintf("in alarm and ticks = %d\n", ticks);
+    if(ticks)
+    {
+        proc->isAlarmed = 1;            // turn on the alarm signal flag
+        proc->alarmTickCount = ticks;   // set the number of ticks
+    }
+    else // cancel the alarm signal
+    {
+        proc->isAlarmed = 0;        // turn off the alarm signal flag
+        proc->alarmTickCount = 0;   // reset the counter
+    }
+}
+
+void updateAllAlarmedProcesses(void)
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if(p->isAlarmed)
+    {
+        p->alarmTickCount--;
+        if(p->alarmTickCount <= 0)
+        {
+            int alarmSignal = 1 << SIGALRM;
+            p->pending = p->pending | alarmSignal;
+            p->isAlarmed = 0;        // turn off the alarm signal flag
+            p->alarmTickCount = 0;   // reset the counter
+        }
+    }
+  }
+  release(&ptable.lock);
 }

@@ -69,7 +69,9 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
   int pending;                 // Represents all currently unhandled (pending) signals
-  sighandler_t sigArr[32];     // array of signals Handlers pointers NULL is treated as defaultHandler
+  sighandler_t sigArr[NUMSIG]; // array of signal Handlers pointers NULL is treated as defaultHandler
+  int isAlarmed;               // boolean value to mark rather the alarm system call was made for this process
+  int alarmTickCount;          // the counter of ticks since the alarm system call was made
 };
 
 // Process memory is laid out contiguously, low addresses first:
