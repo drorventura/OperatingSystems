@@ -168,7 +168,11 @@ fork(void)
   // updating child pending and array Handlers like his parent
   // 2/1.5
   np->pending = proc->pending;
-  *np->sigArr  = *proc->sigArr;
+
+  for(i = 0 ; i < NUMSIG ; i++)
+  {
+      np->sigArr[i]  = proc->sigArr[i];
+  }
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;

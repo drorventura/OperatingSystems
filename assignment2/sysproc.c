@@ -93,12 +93,14 @@ sys_uptime(void)
 int sys_signal(void)
 {
     int signum = 0;
-    sighandler_t handler;
+//    sighandler_t handler;
+    int handler;
 
-    if((argint(0,&signum) < 0) || argptr(1, (void*)&handler, sizeof(handler) < 0) )
+    if((argint(0,&signum) < 0) || (argint(1, &handler) < 0))
         return -1;
+//    argptr(1, (void*)&handler, sizeof(handler) < 0) )
 
-    return signal(signum,handler);
+    return signal(signum, (sighandler_t)handler);
 }
 
 //add the ability to send a signal to a process 2/1.3
