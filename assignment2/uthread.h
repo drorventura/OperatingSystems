@@ -12,13 +12,26 @@ struct uthread {
 	int				tid;
 	int 	       	esp;        /* current stack pointer */
 	int 	       	ebp;        /* current base pointer */
-	char		   *stack;	    /* the thread's stack */
+	void		   *stack;	    /* the thread's stack */
 	uthread_state   state;     	/* running, runnable, sleeping */
+	int             firstYield; /* a flag that notify if thread hasn't been switched before */
 };
  
-void uthread_init(void);
-int  uthread_create(void (*func)(void *), void* value);
+int uthread_init(void);
+int  uthread_create(void (*func)(void *), void* arg);
 void uthread_exit(void);
 void uthread_yield(void);
 int  uthred_self(void);
 int  uthred_join(int tid);
+
+/* Macros of Extended Assembly */
+#define LOAD_ESP(val)   asm ("movl %%esp, %0;" : "=r" ( val ))
+#define LOAD_EBP(val)   asm ("movl %%ebp, %0;" : "=r" ( val ))
+#define STORE_ESP(val)  asm ("movl %0, %%esp;" : : "r" ( val ))
+#define STORE_EBP(val)  asm ("movl %0, %%ebp;" : : "r" ( val ))
+#define PUSH_ALL        asm ("pushal;")
+#define POP_ALL         asm ("popal;")
+#define PUSH(val)       asm ("movl %0, %%edi; push %%edi;" : : "r" ( val ))
+#define RET             asm ("ret;")
+#define CALL(addr)      asm("call *%0;" : : "r" ( addr ))
+
