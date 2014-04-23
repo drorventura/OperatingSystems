@@ -9,6 +9,15 @@ static uthread_p currThread;
 
 int nextTid = 1;
 
+struct binary_semaphore
+{
+    int lock;
+    int value;
+    int firstInLine, LastInLine;
+    uthread_p tQueue[MAX_THREAD];
+
+} binary_semaphore;
+
 void initTable(void)
 {
     int i;
@@ -20,6 +29,7 @@ void initTable(void)
         tTable[i].stack = 0;
         tTable[i].state = T_FREE;
         tTable[i].firstYield = 0;
+        tTable[i].semaphoreFlag = 0;
     }
 }
 
@@ -89,42 +99,49 @@ void uthread_yield(void)
 {
     printf(2, "tid is: %d - in yield \n",currThread->tid);
     int i;
-//    uthread_p t;
 
-    for(i = 0 ; i < MAX_THREAD ; i++)
+    for(i = 1 ; i < MAX_THREAD ; i++)
     {
         if(tTable[i].state == T_RUNNABLE)
+        {
             break;
+        }
     }
 
     currThread->state = T_RUNNABLE;
-//    PUSH_ALL;
 
     LOAD_ESP(currThread->esp);
     LOAD_EBP(currThread->ebp);
-
-    currThread = &tTable[i];
-    STORE_ESP(currThread->esp);
-    STORE_EBP(currThread->ebp);
+    
+    currThread = &(tTable[i]);
 
 
     if(currThread->firstYield)
     {
         printf(2,"in first yield of: %d\n", currThread->tid);
-//        printf(2,"esp = %p\n",*(void**)currThread->esp);
-
-//        signal(SIGALRM, uthreadSTORE_ESP(currThread->esp);_yield);
-//        alarm(THREAD_QUANTA);
-
+//      printf(2,"esp = %p\n",*(void**)currThread->esp);
+        
+        signal(SIGALRM, uthread_yield);
+        alarm(THREAD_QUANTA);
+    
+        STORE_ESP(currThread->esp);
+        STORE_EBP(currThread->ebp);
 
         currThread->firstYield = 0;
-//        PUSH(*(void**)currThread->esp);
+
         RET;
+
+        /*CALL(*(void**)currThread->esp);*/
     }
     else
     {
         printf(2,"not first yield of: %d\n", currThread->tid);
-        POP_ALL;
+
+        STORE_ESP(currThread->esp);
+        STORE_EBP(currThread->ebp);
+        CALL(*(void**)currThread->esp);
+        /*POP_ALL;*/
+        /*RET;*/
     }
 }
 
@@ -150,3 +167,65 @@ int uthread_self()
 {
     return currThread->tid;
 }
+
+// part 3 - semaphore impelmentaion
+void
+binary_semaphore_init(struct binary_semaphore* semaphore, int value)
+{
+   int i;
+   semaphore->value = value;
+   semaphore->lock  = 1;
+   semaphore->firstInLine   = 0;
+   semaphore->LastInLine    = 0;
+   
+    for(i=0 ; i < MAX_THREAD ; i++)
+        semaphore->tQueue[i] = 0;
+}
+
+void
+binary_semaphore_down(struct binary_semaphore* semaphore)
+{
+    while(xchg(&semaphore->lock, 1) != 0  ||
+          currThread->state == T_RUNNABLE)
+    {
+        if(!currThread->semaphoreFlag)
+        {
+            semaphore->tQueue[semaphore->LastInLine] = currThread;        // add to queue
+            semaphore->LastInLine = semaphore->LastInLine++ % MAX_THREAD; // update index
+            currThread->state = T_SLEEPING;
+            currThread->semaphoreFlag = 1;
+            /*sigsend(currThread->tid,uthread_yield);*/
+        }
+    }
+            
+    semaphore->lock--;
+    uthread_p t = semaphore->tQueue[semaphore->firstInLine];
+    /*semaphore->firstInLine = semaphore->firstInLine++ % MAX_THREAD;*/
+
+    if (t->tid == currThread->tid)
+    {
+        currThread->state = T_RUNNABLE;
+        semaphore->firstInLine = semaphore->firstInLine++ % MAX_THREAD;
+
+        return;
+    }
+    else 
+    {
+        t->tQueue[firstInLine]->state = T_RUNNABLE;
+        binary_semaphore_down(semaphore);
+
+    }
+
+
+}
+
+
+void
+binary_semaphore_up(struct binary_semaphore* semaphore)
+{
+    if (semaphore->value == 0)
+        semaphore++;
+
+    return;
+}
+
