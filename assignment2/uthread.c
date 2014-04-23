@@ -1,7 +1,6 @@
 #include "types.h"
 #include "user.h"
 #include "uthread.h"
-//#include "spinlock.h"
 #include "signal.h"
 
 static uthread_t tTable[MAX_THREAD];
@@ -145,6 +144,7 @@ uthread_exit(void)
             tTable[i].tid = 0;
             tTable[i].esp = 0;
             tTable[i].ebp = 0;
+            free(tTable[i].stack);
             tTable[i].stack = 0;
             tTable[i].state = T_FREE;
             tTable[i].firstYield = 0;
