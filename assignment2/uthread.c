@@ -2,11 +2,21 @@
 #include "user.h"
 #include "uthread.h"
 #include "signal.h"
+#include "x86.h"
 
 static uthread_t tTable[MAX_THREAD];
 static uthread_p currThread;
 
 int nextTid = 1;
+
+struct binary_semaphore
+{
+    int lock;
+    int value;
+    int firstInLine, LastInLine;
+    uthread_p tQueue[MAX_THREAD];
+
+} binary_semaphore;
 
 void initTable(void)
 {
@@ -19,6 +29,7 @@ void initTable(void)
         tTable[i].stack = 0;
         tTable[i].state = T_FREE;
         tTable[i].firstYield = 0;
+        tTable[i].semaphoreFlag = 0;
     }
 }
 
@@ -43,28 +54,20 @@ uthread_init()
 
 int uthread_create(void (*func)(void *), void* arg)
 {
-//    printf(2, "tid is: %d - in create \n",currThread->tid);
     int i;
 //    uthread_p t = 0;
 
     for(i = 0 ; i < MAX_THREAD ; i++)
     {
-//        printf(2,"return value of if cond : %d\n", tTable[i]->state == T_FREE);
-//        printf(2,"state is: %d \n",tTable[i].state);
         if(tTable[i].state == T_FREE)
         {
-//            t = tTable[i];
             if( !(tTable[i].stack = malloc(STACK_SIZE)) )
                 return 0;
 
             tTable[i].tid = nextTid++;
 
-            printf(2,"new thread: %d was allocate | with stack addr: %p | func addr: %p  \n",
-                                                    tTable[i].tid,
-                                                    tTable[i].stack,
-                                                    func);
-
-            tTable[i].esp = (int)tTable[i].stack + STACK_SIZE - 4;
+            tTable[i].ebp = (int)tTable[i].stack + STACK_SIZE;
+            tTable[i].esp = tTable[i].ebp - 4;
             *(void**)tTable[i].esp = arg;
 
             tTable[i].esp -= 4;
@@ -73,7 +76,6 @@ int uthread_create(void (*func)(void *), void* arg)
             tTable[i].esp -= 4;
             *(void**)tTable[i].esp = func;
 
-            tTable[i].ebp = (int)tTable[i].stack + STACK_SIZE;
             tTable[i].state = T_RUNNABLE;
 
             tTable[i].firstYield = 1;
@@ -89,9 +91,7 @@ int lastThreadIndex = 0;
 // yield is unable to return to second round
 void uthread_yield(void)
 {
-    printf(2, "tid: %d - is in yield \n",currThread->tid);
     int i;
-//    uthread_p t;
 
     while(tTable[lastThreadIndex].state != T_RUNNABLE)
     {
@@ -106,22 +106,24 @@ void uthread_yield(void)
     LOAD_EBP(currThread->ebp);
     LOAD_ESP(currThread->esp);
 
+    /********* switch thread *********/
     currThread = &tTable[i];
+    /*********************************/
+
     currThread->state = T_RUNNING;
 
     if(currThread->firstYield)
     {
-        printf(2,"in first yield of: %d\n", currThread->tid);
         currThread->firstYield = 0;
 
         signal(SIGALRM, uthread_yield);
         alarm(THREAD_QUANTA);
-        CALL(*(void**)currThread->esp);
+
+        STORE_ESP(currThread->esp);
+        RET;
     }
     else
     {
-        printf(2,"NOT FIRST yield of: %d\n", currThread->tid);
-        printf(1, "storing thread's (%d) - esp=%d, ebp=%d\n",currThread->tid,currThread->esp,currThread->ebp);
         POP_ALL;
         STORE_EBP(currThread->ebp);
         STORE_ESP(currThread->esp);
@@ -129,27 +131,17 @@ void uthread_yield(void)
         signal(SIGALRM, uthread_yield);
         alarm(THREAD_QUANTA);
     }
-
-    return;
+//    return;
 }
 
 void
 uthread_exit(void)
 {
-    int i;
-    for(i = 0 ; i < MAX_THREAD ; i++)
-    {
-        if(tTable[i].tid == currThread->tid)
-        {
-            tTable[i].tid = 0;
-            tTable[i].esp = 0;
-            tTable[i].ebp = 0;
-            free(tTable[i].stack);
-            tTable[i].stack = 0;
-            tTable[i].state = T_FREE;
-            tTable[i].firstYield = 0;
-        }
-    }
+    free(currThread->stack);
+    currThread->state = T_FREE;
+
+    sleep(100);
+    RET;
 }
 
 int uthread_self()

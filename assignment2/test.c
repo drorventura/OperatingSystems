@@ -9,7 +9,6 @@ int main(int argc,char** argv)
 {
         uthread_init();
 
-        printf(2,"test address: %p\n", test);
         int tid = uthread_create(test, (void *) 1);
         if (!tid)
                 goto out_err;

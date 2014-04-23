@@ -15,6 +15,7 @@ struct uthread {
 	void		   *stack;	    /* the thread's stack */
 	uthread_state   state;     	/* running, runnable, sleeping */
 	int             firstYield; /* a flag that notify if thread hasn't been switched before */
+    int             semaphoreFlag; /* xchg while loop */
 };
  
 int uthread_init(void);
