@@ -85,47 +85,53 @@ int uthread_create(void (*func)(void *), void* arg)
     return 0;
 }
 
+int lastThreadIndex = 0;
+
+// yield is unable to return to second round
 void uthread_yield(void)
 {
-    printf(2, "tid is: %d - in yield \n",currThread->tid);
+    printf(2, "tid: %d - is in yield \n",currThread->tid);
     int i;
 //    uthread_p t;
 
-    for(i = 0 ; i < MAX_THREAD ; i++)
+    while(tTable[lastThreadIndex].state != T_RUNNABLE)
     {
-        if(tTable[i].state == T_RUNNABLE)
-            break;
+        lastThreadIndex = (lastThreadIndex+1) % MAX_THREAD;
     }
 
-    currThread->state = T_RUNNABLE;
-//    PUSH_ALL;
+    i = lastThreadIndex;
 
-    LOAD_ESP(currThread->esp);
+    currThread->state = T_RUNNABLE;
+
+    PUSH_ALL;
     LOAD_EBP(currThread->ebp);
+    LOAD_ESP(currThread->esp);
 
     currThread = &tTable[i];
-    STORE_ESP(currThread->esp);
-    STORE_EBP(currThread->ebp);
-
+    currThread->state = T_RUNNING;
 
     if(currThread->firstYield)
     {
         printf(2,"in first yield of: %d\n", currThread->tid);
-//        printf(2,"esp = %p\n",*(void**)currThread->esp);
-
-//        signal(SIGALRM, uthreadSTORE_ESP(currThread->esp);_yield);
-//        alarm(THREAD_QUANTA);
-
-
         currThread->firstYield = 0;
-//        PUSH(*(void**)currThread->esp);
-        RET;
+
+        signal(SIGALRM, uthread_yield);
+        alarm(THREAD_QUANTA);
+        CALL(*(void**)currThread->esp);
     }
     else
     {
-        printf(2,"not first yield of: %d\n", currThread->tid);
+        printf(2,"NOT FIRST yield of: %d\n", currThread->tid);
+        printf(1, "storing thread's (%d) - esp=%d, ebp=%d\n",currThread->tid,currThread->esp,currThread->ebp);
         POP_ALL;
+        STORE_EBP(currThread->ebp);
+        STORE_ESP(currThread->esp);
+
+        signal(SIGALRM, uthread_yield);
+        alarm(THREAD_QUANTA);
     }
+
+    return;
 }
 
 void
