@@ -22,8 +22,8 @@ int uthread_init(void);
 int  uthread_create(void (*func)(void *), void* arg);
 void uthread_exit(void);
 void uthread_yield(void);
-int  uthred_self(void);
-int  uthred_join(int tid);
+int  uthread_self(void);
+int  uthread_join(int tid);
 
 /* Macros of Extended Assembly */
 #define LOAD_ESP(val)   asm ("movl %%esp, %0;" : "=r" ( val ))

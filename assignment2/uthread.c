@@ -148,3 +148,9 @@ int uthread_self()
 {
     return currThread->tid;
 }
+
+int  uthread_join(int tid)
+{
+    return 0;
+    //TODO
+}
