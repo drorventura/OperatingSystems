@@ -17,6 +17,14 @@ struct uthread {
 	int             firstYield; /* a flag that notify if thread hasn't been switched before */
     int             semaphoreFlag; /* xchg while loop */
 };
+
+struct binary_semaphore
+{
+    int lock;
+    int firstInLine, lastInLine;
+    int numberOfThreads;
+    uthread_p tQueue[MAX_THREAD];
+};
  
 int uthread_init(void);
 int  uthread_create(void (*func)(void *), void* arg);
@@ -24,6 +32,13 @@ void uthread_exit(void);
 void uthread_yield(void);
 int  uthread_self(void);
 int  uthread_join(int tid);
+
+// ** Part 3 ** //
+void binary_semaphore_init(struct binary_semaphore* semaphore, int value);
+void binary_semaphore_down(struct binary_semaphore* semaphore);
+void binary_semaphore_up(struct binary_semaphore* semaphore);
+int addToQueue(struct binary_semaphore* semaphore, uthread_p thread);
+uthread_p removeFromQueue(struct binary_semaphore* semaphore);
 
 /* Macros of Extended Assembly */
 #define LOAD_ESP(val)   asm ("movl %%esp, %0;" : "=r" ( val ))

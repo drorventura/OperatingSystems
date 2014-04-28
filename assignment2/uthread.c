@@ -4,19 +4,13 @@
 #include "signal.h"
 #include "x86.h"
 
+#define true 1
+#define false 0
+
 static uthread_t tTable[MAX_THREAD];
 static uthread_p currThread;
 
 int nextTid = 1;
-
-struct binary_semaphore
-{
-    int lock;
-    int value;
-    int firstInLine, LastInLine;
-    uthread_p tQueue[MAX_THREAD];
-
-} binary_semaphore;
 
 void initTable(void)
 {
@@ -131,7 +125,6 @@ void uthread_yield(void)
         signal(SIGALRM, uthread_yield);
         alarm(THREAD_QUANTA);
     }
-//    return;
 }
 
 void
@@ -153,4 +146,87 @@ int  uthread_join(int tid)
 {
     return 0;
     //TODO
+}}
+
+//  ***** Part 3 - semaphore impelmentaion ******* //
+void
+binary_semaphore_init(struct binary_semaphore* semaphore, int value)
+{
+   int i;
+   semaphore->lock  = value;
+   semaphore->firstInLine = 0;
+   semaphore->lastInLine  = 0;
+   semaphore->numberOfThreads  = 0;
+   
+    for(i=0 ; i < MAX_THREAD ; i++)
+        semaphore->tQueue[i] = 0;
+}
+
+void
+binary_semaphore_down(struct binary_semaphore* semaphore)
+{
+    /*if lock == 1 do lock == 0
+      else thread.status == sleeping, alarm(0) , move to end of Queue.*/
+    alarm(0);
+
+    if (semaphore->lock == 1) {
+        semaphore->lock--;
+    } else {
+        currThread->state = T_SLEEPING;
+        addToQueue(semaphore,currThread);
+        printf(1, "Thread inserted: %d , Number of threads in Queue: %d\n",
+                currThread->tid,semaphore->numberOfThreads);
+    }
+    alarm(1);
+}
+
+void
+binary_semaphore_up(struct binary_semaphore* semaphore)
+{
+        /*release lock, lock = 1 
+        if Queue is not empty ->  wake up the next thread in Queue.
+            exit.*/
+    alarm(0);
+    if (semaphore->numberOfThreads > 0) {
+        uthread_p thread;
+
+        if ((thread = removeFromQueue(semaphore))) {
+            thread->state = T_RUNNABLE;
+        } else {
+            printf(2,"in Up() - unable to pull thread, reach MAX_THREAD limiti\n");
+        }
+    } else {
+        printf(2,"in Up() - no threads in Queue \n");
+        semaphore->lock = 1;
+    }
+    alarm(1);
+}
+
+int 
+addToQueue(struct binary_semaphore* semaphore, uthread_p thread)
+{
+    if (semaphore->numberOfThreads == MAX_THREAD) {
+        return false;
+    } else {
+        semaphore->tQueue[semaphore->lastInLine] = thread;
+        semaphore->numberOfThreads++;
+        semaphore->lastInLine++;
+        semaphore->lastInLine = semaphore->lastInLine % MAX_THREAD;
+        return true;
+    }
+}
+
+uthread_p 
+removeFromQueue(struct binary_semaphore* semaphore)
+{
+    if (semaphore->numberOfThreads == 0) {
+        return false;
+    } else {
+        uthread_p t;
+        semaphore->numberOfThreads--;
+        t = semaphore->tQueue[semaphore->firstInLine];
+        semaphore->firstInLine++;
+        semaphore->firstInLine = semaphore->firstInLine % MAX_THREAD;
+        return t;
+    }
 }
