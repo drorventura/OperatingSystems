@@ -14,6 +14,7 @@ struct binary_semaphore
     int lock;
     int value;
     int firstInLine, LastInLine;
+    int numberOfThreads;
     uthread_p tQueue[MAX_THREAD];
 
 } binary_semaphore;
@@ -175,8 +176,9 @@ binary_semaphore_init(struct binary_semaphore* semaphore, int value)
    int i;
    semaphore->value = value;
    semaphore->lock  = 1;
-   semaphore->firstInLine   = 0;
-   semaphore->LastInLine    = 0;
+   semaphore->firstInLine = 0;
+   semaphore->LastInLine  = 0;
+   semaphore->numberOfThreads  = 0;
    
     for(i=0 ; i < MAX_THREAD ; i++)
         semaphore->tQueue[i] = 0;
@@ -185,47 +187,54 @@ binary_semaphore_init(struct binary_semaphore* semaphore, int value)
 void
 binary_semaphore_down(struct binary_semaphore* semaphore)
 {
-    while(xchg(&semaphore->lock, 1) != 0  ||
-          currThread->state == T_RUNNABLE)
+    while(xchg(&semaphore->lock, 1) != 0)
     {
         if(!currThread->semaphoreFlag)
         {
-            semaphore->tQueue[semaphore->LastInLine] = currThread;        // add to queue
-            semaphore->LastInLine = semaphore->LastInLine++ % MAX_THREAD; // update index
-            currThread->state = T_SLEEPING;
             currThread->semaphoreFlag = 1;
-            /*sigsend(currThread->tid,uthread_yield);*/
+            semaphore->tQueue[semaphore->LastInLine] = currThread;                  // add to queue
+            semaphore->numberOfThreads++;
+            semaphore->LastInLine = semaphore->LastInLine++ % MAX_THREAD;           // update index
+            sigsend(currThread->tid, uthread_yield);  // call to yield
         }
     }
-            
-    semaphore->lock--;
+    
+    return; 
+
+    /*semaphore->lock--;
     uthread_p t = semaphore->tQueue[semaphore->firstInLine];
-    /*semaphore->firstInLine = semaphore->firstInLine++ % MAX_THREAD;*/
 
     if (t->tid == currThread->tid)
     {
         currThread->state = T_RUNNABLE;
+        sigsend(t->tid, uthread_yield);
         semaphore->firstInLine = semaphore->firstInLine++ % MAX_THREAD;
-
         return;
     }
     else 
     {
-        t->tQueue[firstInLine]->state = T_RUNNABLE;
+        t->state = T_RUNNABLE;
+        semaphore->lock++;
+        sigsend(t->tid, uthread_yield);
         binary_semaphore_down(semaphore);
-
-    }
-
-
+    }*/
 }
 
 
 void
 binary_semaphore_up(struct binary_semaphore* semaphore)
 {
-    if (semaphore->value == 0)
-        semaphore++;
+    if (semaphore->numberOfThreads == 0)
+    {
+        semaphore->lock = 1;
+        return;
+    }
+    else
+    {
+        uthread_p t = semaphore->tQueue[semaphore->firstInLine];
 
-    return;
+        t->state= T_RUNNABLE;
+        sigsend(currThread->tid, uthread_yield);
+    }
 }
 
