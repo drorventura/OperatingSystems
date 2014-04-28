@@ -1,8 +1,11 @@
 #include "types.h"
 #include "user.h"
 #include "uthread.h"
-//#include "spinlock.h"
 #include "signal.h"
+#include "x86.h"
+
+#define true 1
+#define false 0
 
 static uthread_t tTable[MAX_THREAD];
 static uthread_p currThread;
@@ -12,8 +15,7 @@ int nextTid = 1;
 struct binary_semaphore
 {
     int lock;
-    int value;
-    int firstInLine, LastInLine;
+    int firstInLine, lastInLine;
     int numberOfThreads;
     uthread_p tQueue[MAX_THREAD];
 
@@ -55,28 +57,20 @@ uthread_init()
 
 int uthread_create(void (*func)(void *), void* arg)
 {
-//    printf(2, "tid is: %d - in create \n",currThread->tid);
     int i;
 //    uthread_p t = 0;
 
     for(i = 0 ; i < MAX_THREAD ; i++)
     {
-//        printf(2,"return value of if cond : %d\n", tTable[i]->state == T_FREE);
-//        printf(2,"state is: %d \n",tTable[i].state);
         if(tTable[i].state == T_FREE)
         {
-//            t = tTable[i];
             if( !(tTable[i].stack = malloc(STACK_SIZE)) )
                 return 0;
 
             tTable[i].tid = nextTid++;
 
-            printf(2,"new thread: %d was allocate | with stack addr: %p | func addr: %p  \n",
-                                                    tTable[i].tid,
-                                                    tTable[i].stack,
-                                                    func);
-
-            tTable[i].esp = (int)tTable[i].stack + STACK_SIZE - 4;
+            tTable[i].ebp = (int)tTable[i].stack + STACK_SIZE;
+            tTable[i].esp = tTable[i].ebp - 4;
             *(void**)tTable[i].esp = arg;
 
             tTable[i].esp -= 4;
@@ -85,7 +79,6 @@ int uthread_create(void (*func)(void *), void* arg)
             tTable[i].esp -= 4;
             *(void**)tTable[i].esp = func;
 
-            tTable[i].ebp = (int)tTable[i].stack + STACK_SIZE;
             tTable[i].state = T_RUNNABLE;
 
             tTable[i].firstYield = 1;
@@ -96,72 +89,61 @@ int uthread_create(void (*func)(void *), void* arg)
     return 0;
 }
 
+int lastThreadIndex = 0;
+
+// yield is unable to return to second round
 void uthread_yield(void)
 {
-    printf(2, "tid is: %d - in yield \n",currThread->tid);
     int i;
 
-    for(i = 1 ; i < MAX_THREAD ; i++)
+    while(tTable[lastThreadIndex].state != T_RUNNABLE)
     {
-        if(tTable[i].state == T_RUNNABLE)
-        {
-            break;
-        }
+        lastThreadIndex = (lastThreadIndex+1) % MAX_THREAD;
     }
+
+    i = lastThreadIndex;
 
     currThread->state = T_RUNNABLE;
 
-    LOAD_ESP(currThread->esp);
+    PUSH_ALL;
     LOAD_EBP(currThread->ebp);
-    
-    currThread = &(tTable[i]);
+    LOAD_ESP(currThread->esp);
 
+    /********* switch thread *********/
+    currThread = &tTable[i];
+    /*********************************/
+
+    currThread->state = T_RUNNING;
 
     if(currThread->firstYield)
     {
-        printf(2,"in first yield of: %d\n", currThread->tid);
-//      printf(2,"esp = %p\n",*(void**)currThread->esp);
-        
-        signal(SIGALRM, uthread_yield);
-        alarm(THREAD_QUANTA);
-    
-        STORE_ESP(currThread->esp);
-        STORE_EBP(currThread->ebp);
-
         currThread->firstYield = 0;
 
-        RET;
+        signal(SIGALRM, uthread_yield);
+        alarm(THREAD_QUANTA);
 
-        /*CALL(*(void**)currThread->esp);*/
+        STORE_ESP(currThread->esp);
+        RET;
     }
     else
     {
-        printf(2,"not first yield of: %d\n", currThread->tid);
-
-        STORE_ESP(currThread->esp);
+        POP_ALL;
         STORE_EBP(currThread->ebp);
-        CALL(*(void**)currThread->esp);
-        /*POP_ALL;*/
-        /*RET;*/
+        STORE_ESP(currThread->esp);
+
+        signal(SIGALRM, uthread_yield);
+        alarm(THREAD_QUANTA);
     }
 }
 
 void
 uthread_exit(void)
 {
-    int i;
-    for(i = 0 ; i < MAX_THREAD ; i++)
-    {
-        if(tTable[i].tid == currThread->tid)
-        {
-            tTable[i].tid = 0;
-            tTable[i].esp = 0;
-            tTable[i].ebp = 0;
-            tTable[i].stack = 0;
-            tTable[i].state = T_FREE;
-            tTable[i].firstYield = 0;
-        }
-    }
+    free(currThread->stack);
+    currThread->state = T_FREE;
+
+    sleep(100);
+    RET;
 }
 
 int uthread_self()
@@ -174,8 +156,7 @@ void
 binary_semaphore_init(struct binary_semaphore* semaphore, int value)
 {
    int i;
-   semaphore->value = value;
-   semaphore->lock  = 1;
+   semaphore->lock  = value;
    semaphore->firstInLine = 0;
    semaphore->LastInLine  = 0;
    semaphore->numberOfThreads  = 0;
@@ -187,7 +168,23 @@ binary_semaphore_init(struct binary_semaphore* semaphore, int value)
 void
 binary_semaphore_down(struct binary_semaphore* semaphore)
 {
-    while(xchg(&semaphore->lock, 1) != 0)
+
+    /*if lock == 1 do lock == 0
+      else thread.status == sleeping, alarm(0) , move to end of Queue.*/
+
+    if (semaphore->lock == 0) {
+        semaphore->lock = 1;
+        return;
+    } else {
+        alarm(0);
+        currThread->state = T_SLEEPING;
+        semaphore->tQueue[semaphore->lastInLine] = currThread;
+        semaphore->numberOfThreads++;
+    }
+
+
+
+    /*while(xchg(&semaphore->lock, 1) != 0)
     {
         if(!currThread->semaphoreFlag)
         {
@@ -199,7 +196,7 @@ binary_semaphore_down(struct binary_semaphore* semaphore)
         }
     }
     
-    return; 
+    return; */
 
     /*semaphore->lock--;
     uthread_p t = semaphore->tQueue[semaphore->firstInLine];
@@ -224,6 +221,14 @@ binary_semaphore_down(struct binary_semaphore* semaphore)
 void
 binary_semaphore_up(struct binary_semaphore* semaphore)
 {
+
+        /*release lock, lock = 1 
+        if Queue is not empty ->  wake up the next thread in Queue.
+            exit.*/
+
+
+
+
     if (semaphore->numberOfThreads == 0)
     {
         semaphore->lock = 1;
@@ -238,3 +243,32 @@ binary_semaphore_up(struct binary_semaphore* semaphore)
     }
 }
 
+
+int 
+addToQueue(struct binary_semaphore* semaphore, uthread_p thread)
+{
+    if (semaphore->numberOfThreads == MAX_THREAD) {
+        return false;
+    } else {
+        semaphore->tQueue[semaphore->lastInLine] = thread;
+        semaphore->numberOfThreads++;
+        semaphore->lastInLine++;
+        semaphore->lastInLine = semaphore->lastInLine % MAX_THREAD;
+        return true;
+    }
+}
+
+uthread_p 
+removeFromQueue(struct binary_semaphore* semaphore, uthread_p thread)
+{
+    if (semaphore->numberOfThreads == 0) {
+        return false;
+    } else {
+        uthread_p t;
+        semaphore->numberOfThreads--;
+        t = semaphore->tQueue[semaphore->firstInLine];
+        semaphore->firstInLine++;
+        semaphore->firstInLine = semaphore->firstInLine % MAX_THREAD;
+        return t;
+    }
+}
