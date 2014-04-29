@@ -45,17 +45,16 @@ int main(int argc, char **argv)
         arr[i] = -1;
     }
 
-
     printf(1, "Creating threads\n");
     for (i = 0; i < NUM_SELLERS; i++)
         arr[i] = uthread_create(SellTickets, randomSleeps + i);
 
     printf(1, "Start selling\n");
 
-    for (i=0 ; i < NUM_SELLERS ; i++) {
-        if (arr[i] != -1)
-            uthread_join(arr[i]);
-    }
+//    while(1){}
+
+    for (i=0 ; i < NUM_SELLERS ; i++)
+        uthread_join(arr[i]);
 
     printf(1," after join for all \n");
 
@@ -99,9 +98,10 @@ void SellTickets(void* arg)
             printf(1, "%d sold one (%d left)\n", 
                     uthread_self(), numTickets);
         }
+        sleep(50);
 
         binary_semaphore_up(&ticketsLock);
     }
-    //printf(1, "%d noticed all tickets sold! (I sold %d myself) \n"
-      //      , uthread_self(), numSoldByThisThread);
+    printf(1, "%d noticed all tickets sold! (I sold %d myself) \n"
+            , uthread_self(), numSoldByThisThread);
 }

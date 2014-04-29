@@ -158,6 +158,7 @@ uthread_exit(void)
 
     free(currThread->stack);
     currThread->state = T_FREE;
+    currThread->tid = 0;
 
     currThread = &tTable[0];
     currThread->state = T_RUNNING;
@@ -303,21 +304,21 @@ removeFromQueue(struct binary_semaphore* semaphore)
     }
 }
 
-void
-printQueue(struct binary_semaphore* semaphore)
-{
-    int i = semaphore->numberOfThreads;
-    int j = 0;
-    int first = semaphore->firstInLine;
-
-    printf(1,"[");
-
-    for ( ; j < i ; j++)
-    {
-        printf(1,"%d, ",semaphore->tQueue[first]->tid);
-        first++;
-        first = first % MAX_THREAD;
-    }
-
-    printf(1,"] first = %d, last = %d \n",semaphore->firstInLine,semaphore->lastInLine);
-}
+//void
+//printQueue(struct binary_semaphore* semaphore)
+//{
+//    int i = semaphore->numberOfThreads;
+//    int j = 0;
+//    int first = semaphore->firstInLine;
+//
+//    printf(1,"[");
+//
+//    for ( ; j < i ; j++)
+//    {
+//        printf(1,"%d, ",semaphore->tQueue[first]->tid);
+//        first++;
+//        first = first % MAX_THREAD;
+//    }
+//
+//    printf(1,"] first = %d, last = %d \n",semaphore->firstInLine,semaphore->lastInLine);
+//}

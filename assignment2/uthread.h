@@ -42,7 +42,6 @@ int addToQueue(struct binary_semaphore* semaphore, uthread_p thread);
 uthread_p removeFromQueue(struct binary_semaphore* semaphore);
 int returnToMainProgram(void);
 void switchContent(void);
-void printQueue(struct binary_semaphore* semaphore);
 
 /* Macros of Extended Assembly */
 #define LOAD_ESP(val)   asm ("movl %%esp, %0;" : "=r" ( val ))
