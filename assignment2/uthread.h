@@ -21,7 +21,8 @@ struct uthread {
 struct binary_semaphore
 {
     int lock;
-    int firstInLine, lastInLine;
+    int firstInLine;
+    int lastInLine;
     int numberOfThreads;
     uthread_p tQueue[MAX_THREAD];
 };
@@ -39,6 +40,9 @@ void binary_semaphore_down(struct binary_semaphore* semaphore);
 void binary_semaphore_up(struct binary_semaphore* semaphore);
 int addToQueue(struct binary_semaphore* semaphore, uthread_p thread);
 uthread_p removeFromQueue(struct binary_semaphore* semaphore);
+int returnToMainProgram(void);
+void switchContent(void);
+void printQueue(struct binary_semaphore* semaphore);
 
 /* Macros of Extended Assembly */
 #define LOAD_ESP(val)   asm ("movl %%esp, %0;" : "=r" ( val ))
