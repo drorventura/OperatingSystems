@@ -98,7 +98,6 @@ void SellTickets(void* arg)
             printf(1, "%d sold one (%d left)\n", 
                     uthread_self(), numTickets);
         }
-        sleep(50);
 
         binary_semaphore_up(&ticketsLock);
     }
