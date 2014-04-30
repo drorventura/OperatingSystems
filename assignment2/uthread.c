@@ -173,28 +173,21 @@ int uthread_self()
 
 int uthread_join(int tid)
 {
-    //printf(1,"in join for thread %d: \n", tid);
-    int finishedLoop;
     int i;
 
-startOver:
-    finishedLoop = MAX_THREAD;
-    i = 0;
-
-    while (tTable[i].tid != tid) {
-        if (!finishedLoop)
-            return true;
-        i++;
-        i = i % MAX_THREAD;
-        finishedLoop--;
+    for (i=0 ; i < MAX_THREAD ; i++) {
+     if (tTable[i].tid == tid)
+         break;
     }
 
-    if (tTable[i].state == T_FREE) {
-        return true;
-    } else {
-        goto startOver;
-    }
+    if (i == MAX_THREAD)
+     return true;
 
+    alarm(0);
+    while (tTable[i].state != T_FREE) {
+        currThread->state = T_SLEEPING;
+        alarm(1);
+    }
     return true;
 }
 
@@ -228,11 +221,12 @@ binary_semaphore_down(struct binary_semaphore* semaphore)
         currThread->state = T_SLEEPING;
         if(!addToQueue(semaphore, currThread))
         {
-            printf(1, "Thread %d wasn't inserted");
+            printf(1, "Thread %d wasn't inserted \n", currThread->tid);
         }
     }
 
     alarm(1);
+    sleep(2);
 }
 
 void
@@ -262,6 +256,7 @@ binary_semaphore_up(struct binary_semaphore* semaphore)
     }
 
     alarm(1);
+    sleep(2);
 }
 
 int 
