@@ -187,6 +187,7 @@ int uthread_join(int tid)
     while (tTable[i].state != T_FREE) {
         currThread->state = T_SLEEPING;
         alarm(1);
+        sleep(2);
     }
     return true;
 }
