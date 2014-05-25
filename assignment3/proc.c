@@ -495,7 +495,7 @@ procdump(void)
 
                       if((*pte & PTE_P) && (*pte & PTE_U) && (*pte & PTE_A)) {
                           pte_ppn = PTE_ADDR(*pte);
-                          phyppn = v2p((void*)pte_ppn);
+                          phyppn = (pte_t)p2v(pte_ppn);
                           cprintf("*Page mapping: %p --> %p\n",j,phyppn >> 12);    // ass3 page 1
                           cprintf("    |__ptble PTE %d, %d, %p\n",j,pte_ppn,phyppn);
                       }

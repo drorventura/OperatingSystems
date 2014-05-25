@@ -45,7 +45,8 @@ exec(char *path, char **argv)
       goto bad;
     if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
-    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
+    int flagWriteELF = ph.flags & ELF_PROG_FLAG_EXEC;
+    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz,flagWriteELF) < 0)
       goto bad;
   }
   iunlockput(ip);
