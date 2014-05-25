@@ -33,7 +33,9 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  sz = 0;
+  //2.1
+  /*sz = 0;*/
+  sz = PGSIZE - 1; //0x1000 exacly 3.1
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;

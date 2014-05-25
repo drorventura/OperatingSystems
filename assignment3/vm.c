@@ -316,7 +316,8 @@ copyuvm(pde_t *pgdir, uint sz)
 
   if((d = setupkvm()) == 0)
     return 0;
-  for(i = 0; i < sz; i += PGSIZE){
+  /*for(i = 0; i < sz; i += PGSIZE){ // 3.1*/
+  for(i = PGSIZE; i < sz; i += PGSIZE){ // 3.1
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
