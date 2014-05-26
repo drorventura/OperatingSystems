@@ -193,30 +193,34 @@ inituvm(pde_t *pgdir, char *init, uint sz)
 
 // Load a program segment into pgdir.  addr must be page-aligned
 // and the pages from addr to addr+sz must already be mapped.
-int //3.3 - signature
+    int //3.3 - signature
 loaduvm(pde_t *pgdir, char *addr, struct inode *ip, 
         uint offset, uint sz,int flagWriteELF)
 {
-  uint i, pa, n;
-  pte_t *pte;
+    uint i, pa, n;
+    pte_t *pte;
 
-  /*if((uint) addr % PGSIZE != 0)                   //3.3
+    /*if((uint) addr % PGSIZE != 0)                   //3.3
       panic("loaduvm: addr must be page aligned");*/
-  for(i = 0; i < sz; i += PGSIZE){
-      if((pte = walkpgdir(pgdir, addr+i, 0)) == 0)
-          panic("loaduvm: address should exist");
-      /*pa = PTE_ADDR(*pte);*/
-      /**pte = *pte & ~PTE_W; //3.3 | ~ logical not<]*/
-      pa = PTE_ADDR(*pte) + ((uint)(addr) % PGSIZE); //3.3
+    for(i = 0; i < sz; i += PGSIZE){
+        if((pte = walkpgdir(pgdir, addr+i, 0)) == 0)
+            panic("loaduvm: address should exist");
+        /**pte = *pte & ~PTE_W; //3.3 | ~ logical not<]*/
 
-      if(sz - i < PGSIZE)
-          n = sz - i;
-      else
-          n = PGSIZE;
-      if(readi(ip, p2v(pa), offset+i, n) != n)
-          return -1;
-  }
-  return 0;
+        /*pa = PTE_ADDR(*pte);*/
+
+        /*pa = PTE_ADDR(*pte) + ((uint)(addr)); //3.3<]*/
+
+        pa = PTE_ADDR(*pte) + ((uint)(addr) % PGSIZE); //3.3
+
+        if(sz - i < PGSIZE)
+            n = sz - i;
+        else
+            n = PGSIZE;
+        if(readi(ip, p2v(pa), offset+i, n) != n)
+            return -1;
+    }
+    return 0;
 }
 
 // Allocate page tables and physical memory to grow process from oldsz to
@@ -330,6 +334,7 @@ copyuvm(pde_t *pgdir, uint sz)
     if((mem = kalloc()) == 0)
       goto bad;
     memmove(mem, (char*)p2v(pa), PGSIZE);
+
     // 3.3 checking if father while fork had PTE_W set
     /*if(mappages(d, (void*)i, PGSIZE, v2p(mem), PTE_W|PTE_U) < 0)*/
     if((*pte & PTE_W) != 0) {
@@ -385,5 +390,47 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
     buf += n;
     va = va0 + PGSIZE;
   }
+  return 0;
+}
+
+// 3.4 copyuvm for cowfork Given a parent process's page table, 
+// create a copy of it for a child.
+pde_t*
+copyuvm_cowfork(pde_t *pgdir, uint sz)
+{
+  pde_t *d;
+  pte_t *pte;
+  uint pa, i;
+  char *mem;
+
+  if((d = setupkvm()) == 0)
+    return 0;
+  /*for(i = 0; i < sz; i += PGSIZE){ // 3.1*/
+  for(i = PGSIZE; i < sz; i += PGSIZE){ // 3.1
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    if(!(*pte & PTE_P))
+      panic("copyuvm: page not present");
+    //3.4 - set page as read-only & shared.
+    *pte = *pte & ~PTE_W; 
+    *pte = *pte | PTE_SH; 
+
+    pa = PTE_ADDR(*pte);
+    /*if((mem = kalloc()) == 0)
+      goto bad;*/
+    /*memmove(mem, (char*)p2v(pa), PGSIZE);*/
+
+    if((*pte & PTE_W) != 0) {
+        if(mappages(d, (void*)i, PGSIZE, pa, PTE_W|PTE_U) < 0)
+            goto bad;
+    } else {
+        if(mappages(d, (void*)i, PGSIZE, pa, PTE_U) < 0)
+            goto bad;
+    }
+  }
+  return d;
+
+bad:
+  freevm(d);
   return 0;
 }

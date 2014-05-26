@@ -22,6 +22,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int cowfork(void);//3.4
 
 // ulib.c
 int stat(char*, struct stat*);
