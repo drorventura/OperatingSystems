@@ -444,6 +444,7 @@ kill(int pid)
 void
 procdump(void)
 {
+  cprintf("\n------------------------------procdump-----------------------------------\n");
   static char *states[] = {
   [UNUSED]    "unused",
   [EMBRYO]    "embryo",
@@ -457,21 +458,51 @@ procdump(void)
   char *state;
   uint pc[10];
   
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state == UNUSED)
-      continue;
-    if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
-      state = states[p->state];
-    else
-      state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
-    if(p->state == SLEEPING){
-      getcallerpcs((uint*)p->context->ebp+2, pc);
-      for(i=0; i<10 && pc[i] != 0; i++)
-        cprintf(" %p", pc[i]);
-    }
-    cprintf("\n");
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+      if(p->state == UNUSED)
+          continue;
+      if(p->state >= 0 && p->state < NELEM(states) && states[p->state])
+          state = states[p->state];
+      else
+          state = "???";
+      cprintf("%d %s %s", p->pid, state, p->name);
+      if(p->state == SLEEPING){
+          getcallerpcs((uint*)p->context->ebp+2, pc);
+          for(i=0; i<10 && pc[i] != 0; i++)
+              cprintf(" %p", pc[i]);
+          //3.1
+          cprintf("\n*Page tables:\n");
+          cprintf("memory location of page directory = %d\n",p->pgdir);
+          int n = 1;
+          for(i=0 ; i < NPDENTRIES ;i++) {
+              //1.3
+              int j;
+              pde_t *pde = &p->pgdir[i];              // page drivetory entry
+              pte_t *pgtab;                           // page table address
+              pde_t *pte;                             // page table entry
+
+              if((*pde & PTE_P) && (*pde & PTE_U) && (*pde & PTE_A)) {
+                  uint pde_ppn    =  PTE_ADDR(*pde);          // 20 MSBs in pgdir entry.
+                  pgtab = (pte_t*)p2v(pde_ppn);               // address of relevant page table
+                  uint phyppn;
+                  uint pte_ppn;
+
+                  cprintf("\n%d) pdir PTE %d, %p \n",n,i,pde_ppn);
+                  n++;
+                  cprintf("memory location of page table = %p\n",pgtab);
+                  for(j=0 ; j < NPTENTRIES ; j++) {
+                      pte = &pgtab[j];
+
+                      if((*pte & PTE_P) && (*pte & PTE_U) && (*pte & PTE_A)) {
+                          pte_ppn = PTE_ADDR(*pte);
+                          phyppn = (pte_t)p2v(pte_ppn);
+                          cprintf("*Page mapping: %p --> %p\n",j,phyppn >> 12);    // ass3 page 1
+                          cprintf("    |__ptble PTE %d, %d, %p\n",j,pte_ppn,phyppn);
+                      }
+                  }
+              }
+          }
+      }
+    cprintf("-------------------------------------------------------------------------\n");
   }
 }
-
-

@@ -43,7 +43,7 @@ uthread_init()
     signal(SIGALRM, uthread_yield);
     alarm(THREAD_QUANTA);
 
-    return 0;   // TODO check what do be need to return
+    return 0;
 }
 
 int uthread_create(void (*func)(void *), void* arg)
@@ -187,6 +187,7 @@ int uthread_join(int tid)
     while (tTable[i].state != T_FREE) {
         currThread->state = T_SLEEPING;
         alarm(1);
+        sleep(2);
     }
     return true;
 }

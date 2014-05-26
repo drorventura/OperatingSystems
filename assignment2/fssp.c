@@ -22,12 +22,6 @@ int *firingSquad;
 int *tempFiringSquad;
 int counter;
 
-//int Q = 1;
-//int Z = 2;
-//int P = 3;
-//int M = 4;
-//int R = 5;
-//int F = 6;
 
 int main(int argc, char **argv)
 {
@@ -58,11 +52,6 @@ int main(int argc, char **argv)
     /* thread init */
     for (i = 0; i < numberOfSoldiers ; i++)
         soldierTid[i] = uthread_create(setCommand, (void*) i);
-
-    while (1) {
-//        sleep(40);
-//        printSquad(1);
-    }
 
     /* join */
     for (i=0 ; i < numberOfSoldiers ; i++)
