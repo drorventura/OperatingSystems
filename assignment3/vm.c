@@ -6,7 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
-#include "spinlock.h" //3.4
+#include "spinlock.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -14,7 +14,7 @@ struct segdesc gdt[NSEGS];
 
 //3.4
 int allPhysPageSize = PHYSTOP / PGSIZE;
-struct {
+struct{
     struct spinlock lock;
     int pageCounter[PHYSTOP/PGSIZE];
 }counterStruct;
@@ -284,22 +284,57 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
         else if((*pte & PTE_P) != 0) {
             pa = PTE_ADDR(*pte);
-            if(pa == 0)
-                panic("kfree");
+
+            acquire(&counterStruct.lock);
+
+            if(counterStruct.pageCounter[pa/PGSIZE] == 1) {
+                counterStruct.pageCounter[pa/PGSIZE] = 0;
+                release(&counterStruct.lock);
+                if(pa == 0)
+                    panic("kfree");
+                char *v = p2v(pa);
+                kfree(v);
+                *pte = 0;
+            } else {
+                if(counterStruct.pageCounter[pa/PGSIZE] == 0) {
+                    if(pa == 0)
+                        panic("kfree");
+                    char *v = p2v(pa);
+                    kfree(v);
+                    *pte = 0;
+                    release(&counterStruct.lock);
+                    return newsz;
+                } else {
+                    counterStruct.pageCounter[pa/PGSIZE]--;
+                    if(counterStruct.pageCounter[pa/PGSIZE] == 1) {
+                        if((*pte & PTE_SHARED) != 0) {
+                            *pte = *pte & ~PTE_SHARED;
+                            *pte = *pte | PTE_W ;
+                        }
+                    }
+                }
+                    release(&counterStruct.lock);
+            }
 
             // 3.4
             // True - only one page is pointed need to free page
-            if( ((*pte) & PTE_PCOUNT) ) {
+
+
+            /*if( (*pte & PTE_SHARED) ) { //TODO
                 if(removePageFromCounter(pa,pte)) { 
+                    if(pa == 0)
+                        panic("kfree");
                     char *v = p2v(pa);
                     kfree(v);
                     *pte = 0;
                 }
             } else {
+                if(pa == 0)
+                    panic("kfree");
                 char *v = p2v(pa);
                 kfree(v);
                 *pte = 0;
-            }
+            }*/
         }
     }
     return newsz;
@@ -331,7 +366,7 @@ removePageFromCounter(uint pa,pte_t* pte)
         case 2: 
             (*pce) = (*pce) - 1;
             if((*pte & PTE_SHARED) != 0) {
-                (*pte) = (*pte) & ~PTE_SHARED;
+                (*pte) = (*pte) & PTE_SHARED; //TODO
                 (*pte) = (*pte) | PTE_W;
             }
             release(&counterStruct.lock);
@@ -344,6 +379,7 @@ removePageFromCounter(uint pa,pte_t* pte)
             return 0;
             break;
     }
+    return 0;
 }
 
 // Free a page table and all the physical memory pages
@@ -351,7 +387,6 @@ removePageFromCounter(uint pa,pte_t* pte)
 void
 freevm(pde_t *pgdir)
 {
-    cprintf("free %d \n",proc->pid);
     uint i;
 
     if(pgdir == 0)
@@ -478,29 +513,29 @@ copyuvm_cow(pde_t *pgdir, uint sz)
     *pte = *pte | PTE_PCOUNT; // 3.4 indicate page belong to counter 
 
 	if((*pte & PTE_W) || (*pte & PTE_SHARED)) {
-		if( mappages(d, (void*)i, PGSIZE, pa, PTE_PCOUNT | PTE_SHARED | PTE_U) < 0 ) // insure page to be read only
+		if( mappages(d, (void*)i, PGSIZE, pa, PTE_SHARED | PTE_U) < 0 ) // insure page to be read only
 			goto bad;
 		*pte = *pte & ~PTE_W ; 
         *pte = *pte | PTE_SHARED;
+        
 
     } else { // page is already read only
-		if(mappages(d, (void*)i, PGSIZE, pa , PTE_U) < 0)
+		if(mappages(d, (void*)i, PGSIZE, pa , PTE_RONLY | PTE_U) < 0)
 			goto bad;
     }
-        
         //////////////////////////////////
         // updating counter struct with new pointed page
         acquire(&counterStruct.lock);
-        int pageIndex = pa/PGSIZE;
-        int *pce = &(counterStruct.pageCounter[pageIndex]); // Page Counter Enry \m/
+        int *pce = &(counterStruct.pageCounter[pa/PGSIZE]); // Page Counter Enry \m/
 
-        if( *pce == 0) {
-            *pce = 2; // first Initialize father and son pointing to page
-        } else {
-            *pce = *pce + 1;
-        }
+            if( (*pce) == 0) {
+                *pce = 2; // first Initialize father and son pointing to page
+            } else {
+                (*pce) = (*pce) + 1;
+            }
         release(&counterStruct.lock);
         ///////////////////////////////////
+        
   }
 	asm("movl %cr3,%eax");
 	asm("movl %eax,%cr3");
@@ -522,17 +557,22 @@ handler_pgflt()
     if((pte = walkpgdir(proc->pgdir, (void *) fault_addr , 0)) == 0)
     	panic("pageFaultHandler: pte should exist");
 
-    if((*pte & PTE_SHARED) != 0) {
+    if(( (*pte & PTE_RONLY) != 0) ) {
+        panic("try to write to READ ONLY");
+        return 0;
+    }
+
+    if(((*pte & PTE_SHARED) != 0)) { 
+
 		pa = PTE_ADDR(*pte);
 
         acquire(&counterStruct.lock);
-        int pageIndex = pa / PGSIZE;
-        int *pce = &(counterStruct.pageCounter[pageIndex]);
+        int *pce = &(counterStruct.pageCounter[pa/PGSIZE]);
 
         (*pce) = (*pce) - 1;
         if((*pce) == 1) {
-            (*pce) = (*pce) & ~PTE_SHARED;
-            (*pce) = (*pce) | PTE_W;
+            *pte = *pte & ~PTE_SHARED;
+            *pte = *pte | PTE_W;
         } 
         release(&counterStruct.lock);
 
@@ -541,7 +581,7 @@ handler_pgflt()
 
 		memmove(mem, (char*)p2v(pa), PGSIZE);
 
-		*pte = v2p(mem) | PTE_W | PTE_P | PTE_U;
+		*pte = v2p(mem) | PTE_W | PTE_P | PTE_U; 
 
 		asm("movl %cr3,%eax");
 		asm("movl %eax,%cr3");
@@ -550,5 +590,16 @@ handler_pgflt()
 
     } else {
     	return 0;
+    }
+}
+
+void
+printCounter() 
+{
+    int i; 
+    for(i = 0 ; i < allPhysPageSize ; i++) {
+        if(counterStruct.pageCounter[i] == 0)
+            continue;
+        cprintf("pageCounter[%d] = %d\n",i,counterStruct.pageCounter[i]);
     }
 }

@@ -19,6 +19,8 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
+extern void printCounter();
+
 static void wakeup1(void *chan);
 
 void
@@ -466,7 +468,7 @@ procdump(void)
       else
           state = "???";
       cprintf("%d %s %s", p->pid, state, p->name);
-      if(p->state == SLEEPING){
+      if(p->state == SLEEPING || p->state == RUNNABLE || p->state == RUNNING){
           getcallerpcs((uint*)p->context->ebp+2, pc);
           for(i=0; i<10 && pc[i] != 0; i++)
               cprintf(" %p", pc[i]);
@@ -496,8 +498,41 @@ procdump(void)
                       if((*pte & PTE_P) && (*pte & PTE_U) && (*pte & PTE_A)) {
                           pte_ppn = PTE_ADDR(*pte);
                           phyppn = (pte_t)p2v(pte_ppn);
-                          cprintf("*Page mapping: %p --> %p\n",j,phyppn >> 12);    // ass3 page 1
                           cprintf("    |__ptble PTE %d, %d, %p\n",j,pte_ppn,phyppn);
+                      }
+                  }
+              }
+          }
+          cprintf("\n\n**Page mapping**\n"); 
+          for(i=0 ; i < NPDENTRIES ;i++) {
+              //1.3
+              int j;
+              pde_t *pde = &p->pgdir[i];              // page drivetory entry
+              pte_t *pgtab;                           // page table address
+              pde_t *pte;                             // page table entry
+
+              if((*pde & PTE_P) && (*pde & PTE_U)  ) {
+                  uint pde_ppn    =  PTE_ADDR(*pde);          // 20 MSBs in pgdir entry.
+                  pgtab = (pte_t*)p2v(pde_ppn);               // address of relevant page table
+                  uint virppn;
+                  uint pte_ppn;
+
+                  for(j=0 ; j < NPTENTRIES ; j++) {
+                      pte = &pgtab[j];
+
+                      if((*pte & PTE_P) && (*pte & PTE_U) ) {
+                          pte_ppn = PTE_ADDR(*pte);
+                          virppn = (pte_t)p2v(pte_ppn);
+
+                          char *readOnly = "n";
+                          char *shared   = "n";
+                          
+                          if((*pte & PTE_SHARED)) {
+                              shared = "y";
+                          } else if (!(*pte & PTE_W)) {
+                              readOnly = "y";
+                          }
+                          cprintf("%d -> %d , %s , %s \n",virppn,pte_ppn,readOnly,shared);
                       }
                   }
               }
@@ -544,3 +579,4 @@ cowfork(void)
   safestrcpy(np->name, proc->name, sizeof(proc->name));
   return pid;
 }
+

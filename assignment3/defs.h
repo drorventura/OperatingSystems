@@ -180,6 +180,7 @@ void            clearpteu(pde_t *pgdir, char *uva);
 pde_t*			copyuvm_cow(pde_t *pgdir, uint sz); //3.4
 int				handler_pgflt(); //3.4
 int				removePageFromCounter(uint pa,pde_t *pte); //3.4 FIXME pte -> pde
+void            printCounter(); //3.4
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
