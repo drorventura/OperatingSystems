@@ -364,8 +364,8 @@ bmap(struct inode *ip, uint bn)
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
-  bn -= NDIRECT;
 
+  bn -= NDIRECT;
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
@@ -376,6 +376,44 @@ bmap(struct inode *ip, uint bn)
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
     }
+    brelse(bp);
+    return addr;
+  }
+
+  // part 1
+  bn -= NINDIRECT;
+  if(bn < DOUBLY_INDIRECT) {
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+        ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    uint firstDimention = bn / NINDIRECT;
+    uint secondDimention = bn % NINDIRECT;
+
+    if((addr = a[firstDimention]) == 0) {
+        a[firstDimention] = addr = balloc(ip->dev);
+        log_write(bp);
+
+        brelse(bp);
+        bp = bread(ip->dev, addr);
+        a = (uint*)bp->data;
+
+        a[secondDimention] = addr = balloc(ip->dev);
+        log_write(bp);
+
+    } else {
+        brelse(bp);
+        bp = bread(ip->dev, addr);
+        a = (uint*)bp->data;
+
+        if((addr = a[secondDimention]) == 0) {
+            a[secondDimention] = addr = balloc(ip->dev);
+            log_write(bp);
+        }
+    }
+
     brelse(bp);
     return addr;
   }
@@ -393,7 +431,9 @@ itrunc(struct inode *ip)
 {
   int i, j;
   struct buf *bp;
+  struct buf *bp2;
   uint *a;
+  uint *b;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -412,6 +452,28 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  // part 1 delete files
+  if(ip->addrs[NDIRECT+1]) {
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(i = 0; i < NINDIRECT; i++){
+        if(a[i]) {
+            bp2 = bread(ip->dev, a[i]);
+            b = (uint*)bp2->data;
+            for(j = 0; j < NINDIRECT; j++) {
+                if(b[j])
+                    bfree(ip->dev, b[j]);
+            }
+            brelse(bp2);
+            bfree(ip->dev, a[i]);
+            a[i] = 0;
+        }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
+    ip->addrs[NDIRECT+1] = 0;
   }
 
   ip->size = 0;
@@ -601,13 +663,22 @@ skipelem(char *path, char *name)
 // Look up and return the inode for a path name.
 // If parent != 0, return the inode for the parent and copy the final
 // path element into name, which must have room for DIRSIZ bytes.
+
+//part 1 - signature change, and de-referencing symbolic links to the correct inode
 static struct inode*
-namex(char *path, int nameiparent, char *name)
+namex(char *path, int nameiparent, char *name, struct inode *prev, int loopCount)
 {
   struct inode *ip, *next;
+  char buf[512];
+
+  // part 1 - prevent loop in symbolic links
+  if(loopCount > 16)
+    return 0;
 
   if(*path == '/')
     ip = iget(ROOTDEV, ROOTINO);
+  else if(prev)
+    ip = idup(prev);
   else
     ip = idup(proc->cwd);
 
@@ -626,10 +697,33 @@ namex(char *path, int nameiparent, char *name)
       iunlockput(ip);
       return 0;
     }
-    iunlockput(ip);
+//    iunlockput(ip);
+
+    //part 1
+    iunlock(ip);
+    ilock(next);
+
+    if(next->type == T_SYMLINK) {
+//      cprintf("in namei for: path = %s, name = %s , inum = %d, itype = %d\n", path, name, next->inum, next->type);
+      if(readi(next, buf, 0, sizeof(buf)) != next-> size) {
+        iunlockput(next);
+        iput(ip);
+        return 0;
+      }
+      buf[next->size] = 0;
+      iunlockput(next);
+//      cprintf("found: name = %s\n", buf);
+      next = namex(buf, 0, name, ip, loopCount++);
+    } else {
+      iunlock(next);
+    }
+
+    iput(ip);
+    // End part 1
+
     ip = next;
   }
-  if(nameiparent){
+  if(nameiparent) {
     iput(ip);
     return 0;
   }
@@ -640,11 +734,17 @@ struct inode*
 namei(char *path)
 {
   char name[DIRSIZ];
-  return namex(path, 0, name);
+  return namex(path, 0, name, 0, 0);
 }
 
 struct inode*
 nameiparent(char *path, char *name)
 {
-  return namex(path, 1, name);
+  return namex(path, 1, name, 0, 0);
+}
+
+struct inode*
+readnamei(char *path, char *name)
+{
+  return namex(path, 0, name, 0, 0);
 }

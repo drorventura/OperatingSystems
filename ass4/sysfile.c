@@ -245,7 +245,7 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, &off)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && ip->type == T_FILE)
+    if((type == T_FILE||T_SYMLINK) && (ip->type == T_FILE||T_SYMLINK))
       return ip;
     iunlockput(ip);
     return 0;
@@ -422,4 +422,41 @@ sys_pipe(void)
   fd[0] = fd0;
   fd[1] = fd1;
   return 0;
+}
+
+//part 1
+int sys_symlink(void) {
+
+    char *new, *old;
+    struct inode *ip;
+
+    if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
+        return -1;
+
+    begin_trans();
+
+    if((ip = create(new, T_SYMLINK, 0, 0)) == 0)
+        return -1;
+
+    writei(ip, old, 0, strlen(old));
+
+    iunlockput(ip);
+    commit_trans();
+
+//    cprintf("Symlink was created from old: %s to new %s\n", old, new);
+    return 0;
+}
+
+int sys_readlink(void) {
+    char *path, *name;
+    int size;
+    struct inode *ip;
+
+    if(argstr(0, &path) < 0 || argstr(1, &name) < 0 || argint(2, &size) < 0)
+        return -1;
+
+    if((ip = readnamei(path,name)) == 0)
+        return -1;
+
+    return sizeof(name);
 }
