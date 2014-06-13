@@ -20,6 +20,8 @@ struct inode {
   short minor;
   short nlink;
   uint size;
+  uint passwordSet;
+  char password[PASS_LEN];
   uint addrs[NDIRECT+2];
 };
 #define I_BUSY 0x1

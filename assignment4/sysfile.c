@@ -14,6 +14,19 @@
 #include "file.h"
 #include "fcntl.h"
 
+// part 2
+int checkPremission(int pid, int inum) {
+    return unlockInodesTable[pid][inum];
+}
+
+void
+resetPassword(struct inode *ip) {
+    int i;
+    for(i = 0 ; i < PASS_LEN ; i++) {  // reset password
+        ip->password[i] = 0;
+    }
+}
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -300,6 +313,11 @@ sys_open(void)
       iunlockput(ip);
       return -1;
     }
+
+    cprintf("pid: %d, ip->passwordSet: %d\n", proc->pid, ip->passwordSet);
+
+    if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum))
+        return -1;
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -462,13 +480,92 @@ int sys_readlink(void) {
 }
 
 int sys_fprot(void) {
+    char *pathname, *password;
+    int length;
+    struct inode *ip;
+
+    if(argstr(0, &pathname) < 0 || argstr(1, &password) < 0)
+        return -1;
+
+//    cprintf("path: %s ||| password: %s\n",pathname, password);
+
+    if((length = strlen(password)) > 9)
+        return -2;
+
+//    cprintf("password length: %d\n",length);
+
+    if((ip = namei(pathname)) == 0)
+        return -3;
+
+    if(ip->type == T_FILE && !ip->passwordSet) {
+        if(!checkInodeReferences(ip))
+            return -4;
+    } else {
+        return -5;
+    }
+
+    ip->passwordSet = 1;
+    resetPassword(ip);
+
+    /******************** TODO ****************/
+    ilock(ip);
+    safestrcpy(ip->password,password, length+1);
+    iupdatePassword(ip);
+    iunlock(ip);
+
+    cprintf("password was set to: %s\n",ip->password);
+
     return 0;
 }
 
-int sys_funprot(void) {
+int sys_funprot(void)
+{
+    char *pathname, *password;
+    int length;
+    struct inode *ip;
+
+    if(argstr(0, &pathname) < 0 || argstr(1, &password) < 0)
+        return -1;
+
+    if((length = strlen(password)) > 9)
+        return -2;
+
+    if((ip = namei(pathname)) == 0)
+        return -3;
+
+    cprintf("password: %s, inode: %s\n",password, ip->password);
+
+//    cprintf("passlength: %d, ip->pass length: %d\n",length, strlen(ip->password));
+    if(ip->passwordSet) {
+        if(strncmp(password, ip->password, length+1) != 0)
+            return -6;
+
+        ip->passwordSet = 0;
+    }
+
+    resetPassword(ip);
+
     return 0;
 }
 
 int sys_funlock(void) {
+    char *pathname, *password;
+    int length;
+    struct inode *ip;
+
+    if(argstr(0, &pathname) < 0 || argstr(1, &password) < 0)
+        return -1;
+
+    if((length = strlen(password)) > 9)
+        return -2;
+
+    if((ip = namei(pathname)) == 0)
+        return -3;
+
+    if(strncmp(password, ip->password, length+1) != 0)
+        return -6;
+
+    unlockInodesTable[proc->pid][ip->inum] = 1;
+
     return 0;
 }

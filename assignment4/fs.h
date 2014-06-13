@@ -10,6 +10,7 @@
 
 #define ROOTINO 1  // root i-number
 #define BSIZE 512  // block size
+#define PASS_LEN 10 //part 2 - password length
 
 // File system super block
 struct superblock {
@@ -31,8 +32,10 @@ struct dinode {
   short minor;          // Minor device number (T_DEV only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
+  uint passwordSet;        // part 2 -> determines if a password has been set
+  char password[PASS_LEN]; // part 2 -> size of password 10 bytes
   uint addrs[NDIRECT+2];   // Data block addresses -> now addrs size is 56bytes
-  uint padding[15];     // part 1 -> 15*4=60 bytes makes total 68+60=128byts
+  char padding[42];     // part 1 -> makes total 68+60=128 bytes
 };
 
 // Inodes per block.

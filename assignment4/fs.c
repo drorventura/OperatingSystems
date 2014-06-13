@@ -216,6 +216,23 @@ iupdate(struct inode *ip)
   brelse(bp);
 }
 
+// part 2
+void
+iupdatePassword(struct inode *ip)
+{
+  struct buf *bp;
+  struct dinode *dip;
+
+  bp = bread(ip->dev, IBLOCK(ip->inum));
+  dip = (struct dinode*)bp->data + ip->inum%IPB;
+  cprintf("iupdate - password in memory: %s\n",ip->password);
+  memmove(dip->password, ip->password, 10);
+  log_write(bp);
+  brelse(bp);
+}
+
+
+
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
@@ -288,6 +305,9 @@ ilock(struct inode *ip)
     ip->minor = dip->minor;
     ip->nlink = dip->nlink;
     ip->size = dip->size;
+    // part 2
+    cprintf("ilock - password from disk: %s\n",dip->password);
+    memmove(ip->password, dip->password, 10);
     memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
     brelse(bp);
     ip->flags |= I_VALID;
@@ -675,14 +695,15 @@ namex(char *path, int nameiparent, char *name, struct inode *prev, int loopCount
   if(loopCount > 16)
     return 0;
 
-  if(*path == '/')
+  if(*path == '/') {
     ip = iget(ROOTDEV, ROOTINO);
-  else if(prev)
+  } else if(prev) {
     ip = idup(prev);
-  else
+  } else {
     ip = idup(proc->cwd);
+  }
 
-  while((path = skipelem(path, name)) != 0){
+  while( (path = skipelem(path, name)) != 0 ) {
     ilock(ip);
     if(ip->type != T_DIR){
       iunlockput(ip);
@@ -697,28 +718,19 @@ namex(char *path, int nameiparent, char *name, struct inode *prev, int loopCount
       iunlockput(ip);
       return 0;
     }
-//    iunlockput(ip);
+
+    iunlockput(ip);
 
     //part 1
-    iunlock(ip);
-    ilock(next);
-
     if(next->type == T_SYMLINK) {
-//      cprintf("in namei for: path = %s, name = %s , inum = %d, itype = %d\n", path, name, next->inum, next->type);
-      if(readi(next, buf, 0, sizeof(buf)) != next-> size) {
-        iunlockput(next);
-        iput(ip);
+      ilock(next);
+      if(readi(next, buf, 0, sizeof(buf)) != next->size) {
         return 0;
       }
       buf[next->size] = 0;
-      iunlockput(next);
-//      cprintf("found: name = %s\n", buf);
-      next = namex(buf, 0, name, ip, loopCount++);
-    } else {
       iunlock(next);
+      next = namex(buf, 0, name, ip, loopCount++);
     }
-
-    iput(ip);
     // End part 1
 
     ip = next;

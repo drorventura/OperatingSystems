@@ -69,6 +69,7 @@ main(int argc, char *argv[])
     exit(1);
   }
 
+//  assert(printf("*************************%d************************",sizeof(struct dinode)) == 0);
   assert((512 % sizeof(struct dinode)) == 0);
   assert((512 % sizeof(struct dirent)) == 0);
 
@@ -222,6 +223,7 @@ ialloc(ushort type)
   din.type = xshort(type);
   din.nlink = xshort(1);
   din.size = xint(0);
+  din.passwordSet = xint(0); // part 2
   winode(inum, &din);
   return inum;
 }

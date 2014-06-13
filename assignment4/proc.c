@@ -7,6 +7,8 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "signal.h"
+#include "fs.h"
+#include "file.h"
 
 struct {
   struct spinlock lock;
@@ -25,6 +27,14 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+
+  //part 2
+  int i, j;
+  for(i = 0 ; i < NPROC ; i++) {
+    for(j = 0 ; j < 200 ; j++)
+        unlockInodesTable[i][j] = 0;
+  }
+
 }
 
 //PAGEBREAK: 32
@@ -154,6 +164,12 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
+
+    // part 2 - funlock
+    int j;
+    for(j=0 ; j < 200 ; j++)
+        unlockInodesTable[np->pid][j] = unlockInodesTable[proc->pid][j];
+    // end part 2
  
   pid = np->pid;
   np->state = RUNNABLE;
@@ -173,6 +189,8 @@ exit(void)
   if(proc == initproc)
     panic("init exiting");
 
+//  cprintf("pid: %d is exiting\n",proc->pid);
+
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
     if(proc->ofile[fd]){
@@ -180,6 +198,11 @@ exit(void)
       proc->ofile[fd] = 0;
     }
   }
+
+  // part 2
+  int j;
+  for(j=0 ; j < 200 ; j++)
+    unlockInodesTable[proc->pid][j] = 0;
 
   iput(proc->cwd);
   proc->cwd = 0;
@@ -474,4 +497,31 @@ procdump(void)
   }
 }
 
+// part 2
+int
+checkInodeReferences(struct inode *ip) {
+    struct proc *p;
+    int counter = 0;
+    int i;
 
+    acquire(&ptable.lock);
+
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if( p->state == SLEEPING ||
+            p->state != RUNNABLE ||
+            p->state != RUNNING ) {
+              for(i = 0; i < NOFILE; i++)
+                if(p->ofile[i] && p->ofile[i]->ip->inum == ip->inum)
+                    counter++;
+            }
+    }
+
+    release(&ptable.lock);
+
+//    cprintf("reference counter: %d\n", counter);
+
+    if(counter <= 1)
+        return 1;
+
+    return 0;
+}

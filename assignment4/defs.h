@@ -44,6 +44,7 @@ void            iput(struct inode*);
 void            iunlock(struct inode*);
 void            iunlockput(struct inode*);
 void            iupdate(struct inode*);
+void            iupdatePassword(struct inode*); // part 2
 int             namecmp(const char*, const char*);
 struct inode*   namei(char*);
 struct inode*   nameiparent(char*, char*);
@@ -117,6 +118,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int             checkInodeReferences(struct inode *ip);  //part 2
 
 // swtch.S
 void            swtch(struct context**, struct context*);

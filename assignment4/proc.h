@@ -73,3 +73,6 @@ struct proc {
 //   original data and bss
 //   fixed-size stack
 //   expandable heap
+
+// part 2
+int unlockInodesTable [NPROC][200];
