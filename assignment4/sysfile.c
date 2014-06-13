@@ -309,15 +309,18 @@ sys_open(void)
     if((ip = namei(path)) == 0)
       return -1;
     ilock(ip);
+//    cprintf("in open path: %s\n",path);
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       return -1;
     }
 
-    cprintf("pid: %d, ip->passwordSet: %d\n", proc->pid, ip->passwordSet);
+//    cprintf("pid: %d, ip->passwordSet: %d\n", proc->pid, ip->passwordSet);
 
-    if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum))
+    if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum)){
+        iunlockput(ip);
         return -1;
+    }
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -497,23 +500,29 @@ int sys_fprot(void) {
     if((ip = namei(pathname)) == 0)
         return -3;
 
+    begin_trans();
+    ilock(ip);
+
     if(ip->type == T_FILE && !ip->passwordSet) {
-        if(!checkInodeReferences(ip))
+        if(!checkInodeReferences(ip)){
+            iunlockput(ip);
             return -4;
+        }
     } else {
+        iunlockput(ip);
         return -5;
     }
 
     ip->passwordSet = 1;
     resetPassword(ip);
-
-    /******************** TODO ****************/
-    ilock(ip);
     safestrcpy(ip->password,password, length+1);
-    iupdatePassword(ip);
-    iunlock(ip);
 
-    cprintf("password was set to: %s\n",ip->password);
+    iupdate(ip);
+    iunlockput(ip);
+
+    commit_trans();
+
+//    cprintf("password was set to: %s\n",ip->password);
 
     return 0;
 }
@@ -533,17 +542,24 @@ int sys_funprot(void)
     if((ip = namei(pathname)) == 0)
         return -3;
 
-    cprintf("password: %s, inode: %s\n",password, ip->password);
+    begin_trans();
 
-//    cprintf("passlength: %d, ip->pass length: %d\n",length, strlen(ip->password));
+    ilock(ip);
+
     if(ip->passwordSet) {
-        if(strncmp(password, ip->password, length+1) != 0)
+        if(strncmp(password, ip->password, length+1) != 0) {
+            iunlockput(ip);
             return -6;
+        }
 
         ip->passwordSet = 0;
     }
 
     resetPassword(ip);
+    iupdate(ip);
+    iunlockput(ip);
+
+    commit_trans();
 
     return 0;
 }

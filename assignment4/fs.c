@@ -211,27 +211,13 @@ iupdate(struct inode *ip)
   dip->minor = ip->minor;
   dip->nlink = ip->nlink;
   dip->size = ip->size;
+//  cprintf("iupdate - password in memory: %s\n",ip->password);
+  dip->passwordSet = ip->passwordSet;
+  memmove(dip->password, ip->password, 10);
   memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
   log_write(bp);
   brelse(bp);
 }
-
-// part 2
-void
-iupdatePassword(struct inode *ip)
-{
-  struct buf *bp;
-  struct dinode *dip;
-
-  bp = bread(ip->dev, IBLOCK(ip->inum));
-  dip = (struct dinode*)bp->data + ip->inum%IPB;
-  cprintf("iupdate - password in memory: %s\n",ip->password);
-  memmove(dip->password, ip->password, 10);
-  log_write(bp);
-  brelse(bp);
-}
-
-
 
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
@@ -306,8 +292,9 @@ ilock(struct inode *ip)
     ip->nlink = dip->nlink;
     ip->size = dip->size;
     // part 2
-    cprintf("ilock - password from disk: %s\n",dip->password);
+    ip->passwordSet = dip->passwordSet;
     memmove(ip->password, dip->password, 10);
+//    cprintf("ilock - password from disk: %s\n",dip->password);
     memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
     brelse(bp);
     ip->flags |= I_VALID;
@@ -719,20 +706,25 @@ namex(char *path, int nameiparent, char *name, struct inode *prev, int loopCount
       return 0;
     }
 
-    iunlockput(ip);
+    iunlock(ip);
 
     //part 1
+    ilock(next);
+
     if(next->type == T_SYMLINK) {
-      ilock(next);
       if(readi(next, buf, 0, sizeof(buf)) != next->size) {
+        iunlockput(ip);
         return 0;
       }
       buf[next->size] = 0;
       iunlock(next);
       next = namex(buf, 0, name, ip, loopCount++);
+    } else {
+      iunlock(next);
     }
     // End part 1
 
+    iput(ip);
     ip = next;
   }
   if(nameiparent) {

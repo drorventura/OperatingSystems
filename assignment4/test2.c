@@ -50,6 +50,7 @@ fprotTest(void) {
         printf(1,"Done, goodbye\n");
   }
 }
+
 void
 funprotTest(void) {
 //  int fd;
@@ -61,7 +62,7 @@ funprotTest(void) {
 //    if( (error = open("ls", O_WRONLY)) < 0)
 //        printf(1,"error - %d\n",error);
 
-    if( (error = funprot("ls", "1234")) < 0)
+    if( (error = funprot("ls", "12345")) < 0)
         printError(error);
   }
 }
@@ -124,5 +125,6 @@ main(int argc, char *argv[]) {
   sanityTest(path,password);
 
   printf(1,"After SanityTest\n");
+
   exit();
 }
