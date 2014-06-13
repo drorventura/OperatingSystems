@@ -11,7 +11,7 @@ main(int argc, char *argv[])
   if((n = readlink("/1",name,100)) < 0)
     printf(2, "readlink failed: link does not exist\n");
   else
-    printf(2, "name is: %s in size %d\n", name, n);
+    printf(2, "Name is: %s | Name size %d\n", name, n);
 
   exit();
 }

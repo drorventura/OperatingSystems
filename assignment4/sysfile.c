@@ -458,5 +458,5 @@ int sys_readlink(void) {
     if((ip = readnamei(path,name)) == 0)
         return -1;
 
-    return sizeof(name);
+    return strlen(name);
 }
