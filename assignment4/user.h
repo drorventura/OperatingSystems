@@ -25,6 +25,10 @@ int uptime(void);
 // part 1
 int symlink(const char *oldpath, const char *newpath);
 int readlink (const char *pathname, char *buf, size_t bufsiz);
+// part 2
+int fprot (const char *pathname, const char* password);
+int funprot (const char *pathname, const char* password);
+int funlock (const char *pathname, const char* password);
 
 // ulib.c
 int stat(char*, struct stat*);

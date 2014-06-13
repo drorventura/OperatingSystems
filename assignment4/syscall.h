@@ -21,5 +21,10 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
-#define SYS_symlink   22 //part 1
-#define SYS_readlink   23 //part 1
+//part 1
+#define SYS_symlink     22
+#define SYS_readlink    23
+//part 2
+#define SYS_fprot      24
+#define SYS_funprot    25
+#define SYS_funlock    26

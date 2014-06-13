@@ -98,8 +98,13 @@ extern int sys_unlink(void);
 extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
-extern int sys_symlink(void); //part 1
-extern int sys_readlink(void); //part 1
+// part 1
+extern int sys_symlink(void);
+extern int sys_readlink(void);
+// part 2
+extern int sys_fprot(void);
+extern int sys_funprot(void);
+extern int sys_funlock(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -123,8 +128,13 @@ static int (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
-[SYS_symlink]   sys_symlink, //part 1
-[SYS_readlink]   sys_readlink, //part 1
+// part 1
+[SYS_symlink]   sys_symlink,
+[SYS_readlink]  sys_readlink,
+// part 2
+[SYS_fprot]     sys_fprot,
+[SYS_funprot]   sys_funprot,
+[SYS_funlock]   sys_funlock,
 };
 
 void

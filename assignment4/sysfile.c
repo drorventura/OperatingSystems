@@ -460,3 +460,15 @@ int sys_readlink(void) {
 
     return strlen(name);
 }
+
+int sys_fprot(void) {
+    return 0;
+}
+
+int sys_funprot(void) {
+    return 0;
+}
+
+int sys_funlock(void) {
+    return 0;
+}
