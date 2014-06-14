@@ -52,17 +52,17 @@ fprotTest(void) {
 }
 
 void
-funprotTest(void) {
+funprotTest(char * path, char * password) {
 //  int fd;
   int error;
 
-  if( (error = fprot("ls", "1234")) < 0)
+  if( (error = fprot(path, password)) < 0)
     printError(error);
   else {
 //    if( (error = open("ls", O_WRONLY)) < 0)
 //        printf(1,"error - %d\n",error);
 
-    if( (error = funprot("ls", "12345")) < 0)
+    if( (error = funprot(path, "12345")) < 0)
         printError(error);
   }
 }
@@ -108,8 +108,6 @@ sanityTest(char * path, char * password) {
 
 int
 main(int argc, char *argv[]) {
-//  fprotTest();
-//  funprotTest();
 
   if(argc != 3) {
     printf(1,"not enough params\n");
@@ -123,8 +121,10 @@ main(int argc, char *argv[]) {
   strcpy(password, argv[2]);
 
   sanityTest(path,password);
-
   printf(1,"After SanityTest\n");
+
+//  fprotTest();
+//  funprotTest(path,password);
 
   exit();
 }

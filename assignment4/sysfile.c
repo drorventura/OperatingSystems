@@ -136,6 +136,11 @@ sys_link(void)
   if((ip = namei(old)) == 0)
     return -1;
 
+  // part 2
+  if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum))
+    return -1;
+  // end part 2
+
   begin_trans();
 
   ilock(ip);
@@ -213,6 +218,13 @@ sys_unlink(void)
   if((ip = dirlookup(dp, name, &off)) == 0)
     goto bad;
   ilock(ip);
+
+  // part 2
+  if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum)){
+    iunlockput(ip);
+    goto bad;
+  }
+  // end part 2
 
   if(ip->nlink < 1)
     panic("unlink: nlink < 1");
@@ -401,6 +413,7 @@ sys_exec(void)
   char *path, *argv[MAXARG];
   int i;
   uint uargv, uarg;
+  struct inode *ip;
 
   if(argstr(0, &path) < 0 || argint(1, (int*)&uargv) < 0){
     return -1;
@@ -418,6 +431,15 @@ sys_exec(void)
     if(fetchstr(proc, uarg, &argv[i]) < 0)
       return -1;
   }
+
+  // part 2
+  if((ip = namei(path)) == 0)
+    return -1;
+
+  if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum))
+      return -1;
+  // end part 2
+
   return exec(path, argv);
 }
 
@@ -454,10 +476,21 @@ int sys_symlink(void) {
     if(argstr(0, &old) < 0 || argstr(1, &new) < 0)
         return -1;
 
+    // part 2
+    if((ip = namei(old)) == 0)
+        return -1;
+
+    if(ip->type == T_FILE && ip->passwordSet && !checkPremission(proc->pid, ip->inum))
+        return -1;
+    // end part 2
+
     begin_trans();
 
-    if((ip = create(new, T_SYMLINK, 0, 0)) == 0)
+    if((ip = create(new, T_SYMLINK, 0, 0)) == 0){
+        iunlockput(ip);
+        commit_trans();
         return -1;
+    }
 
     writei(ip, old, 0, strlen(old));
 
@@ -506,10 +539,12 @@ int sys_fprot(void) {
     if(ip->type == T_FILE && !ip->passwordSet) {
         if(!checkInodeReferences(ip)){
             iunlockput(ip);
+            commit_trans();
             return -4;
         }
     } else {
         iunlockput(ip);
+        commit_trans();
         return -5;
     }
 
@@ -549,6 +584,7 @@ int sys_funprot(void)
     if(ip->passwordSet) {
         if(strncmp(password, ip->password, length+1) != 0) {
             iunlockput(ip);
+            commit_trans();
             return -6;
         }
 
